@@ -50,6 +50,27 @@ interrupted.onfinish();
 assert.equal(element.style.opacity, '0', 'a dismissed reply entrance cannot overwrite its exit');
 assert.ok(interrupted.cancelled);
 assert.equal(timers.size, 0);
+/* A list carried up with a reply bar that has not been given its room yet:
+   moved from one offset to another and left standing at the second. */
+const carried = {
+  style: { transform: '', transition: '', opacity: '' },
+  animate(frames, options) {
+    const animation = { frames, options, cancel() { this.cancelled = true; } };
+    animations.push(animation);
+    return animation;
+  },
+};
+motion.shift(carried, 0, -67, 240, 'ease-out');
+const rise = animations[animations.length - 1];
+assert.equal(rise.frames[0].transform, 'translate3d(0, 0px, 0)');
+assert.equal(rise.frames[1].transform, 'translate3d(0, -67px, 0)');
+assert.equal(carried.style.transform, 'translate3d(0, -67px, 0)',
+  'a shift ends parked where it was sent, whether or not a frame comes');
+motion.park(carried, 0);
+assert.ok(rise.cancelled, 'the room arriving takes the shift over');
+motion.stop(carried);
+assert.deepEqual(carried.style, { transform: '', transition: '', opacity: '' },
+  'netted out, the list is handed back exactly as it was');
 const unsupported = { style: { transform: '', transition: '', opacity: '' } };
 motion.park(unsupported, 55, true);
 motion.letGo(unsupported, 220, 'ease-out', true);

@@ -50,6 +50,19 @@ const create = ({ later = setTimeout, cancelLater = clearTimeout } = {}) => {
       finish();
     }
   };
+  /* From one offset to another, and left parked at the second: the first half
+     of a motion whose end is not known yet. The underlying style is the
+     destination, so the element is where it was sent whether or not a frame
+     ever comes to show the way there. */
+  const shift = (element, from, to, duration, easing) => {
+    park(element, to);
+    const record = moving.get(element);
+    try {
+      record.animation = element.animate(
+        [{ transform: `translate3d(0, ${from}px, 0)` }, { transform: `translate3d(0, ${to}px, 0)` }],
+        { duration, easing });
+    } catch (err) { /* already standing at `to` */ }
+  };
   const stop = element => {
     const record = moving.get(element);
     if (!record) return;
@@ -59,7 +72,7 @@ const create = ({ later = setTimeout, cancelLater = clearTimeout } = {}) => {
     restore(element, record);
     moving.delete(element);
   };
-  return { park, letGo, stop };
+  return { park, letGo, shift, stop };
 };
 
 module.exports = { create };

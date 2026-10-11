@@ -93,13 +93,13 @@ const drawer = shipped.slice(shipped.indexOf('[data-testid="drawer-right"]'));
 assert.doesNotMatch(drawer.slice(0, drawer.indexOf('}')), /animation-name|@keyframes/);
 
 /* The reply bar over the composer is the case turned round -- its panel IS
-   unmounted every time, so keyframes on it fire on every mount and that is the
-   event inject.js hangs its own entrance and exit on. The rule carries no
-   motion itself; it exists to be started. */
+   unmounted every time, so keyframes on it fire on every mount, and that is
+   the event inject.js puts the caret back on. The rule carries no motion
+   itself; it exists to be started. */
 assert.match(shipped, /footer \[data-testid="popup_panel"\] \{\n  animation: whatsapp-desktop-panel 1ms !important;/);
 assert.match(shipped, /@keyframes whatsapp-desktop-panel/);
 /* Not scoped to #main: a community thread draws its composer in a panel of its
-   own, outside #main, and a reply written there deserves the same motion. */
+   own, outside #main, and a reply written there wants its caret too. */
 assert.doesNotMatch(shipped, /#main footer \[data-testid="popup_panel"\]/);
 
 /* A list of names is a column drawn one way round, and every name in it starts

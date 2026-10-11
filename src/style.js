@@ -718,25 +718,26 @@ const DRAWER_MOTION = `
  * The reply bar over the composer, and the one thing this sheet does for it.
  *
  * Clicking Reply mounts [data-testid="popup_panel"] into a footer with the
- * quoted message inside it. Its entrance and its exit are both taken over in
- * src/page/inject.js -- why, and against what measurements, is written out
- * there -- and all that needs from CSS is the moment it arrives.
+ * quoted message inside it, and the caret belongs in the composer under it:
+ * the bar arrives from a menu that has just taken the focus away with it.
+ * src/page/inject.js puts it back, and all that needs from CSS is the moment
+ * the bar arrives.
  *
  * That is what this is: a one-millisecond animation that changes nothing and
  * raises `animationstart` on every mount, in every chat, group and community,
- * with no observer walking the page to find the panel.
+ * with no observer walking the page to find the panel. The bar's motion is
+ * not hung on it any more: WhatsApp moves the bar with Web Animations now, and
+ * inject.js takes those over at the call itself.
  *
  * It is the drawer's case turned round, which is the only reason a mount event
  * works here at all. That panel is never unmounted, so an animation of ours on
  * it would play once and never again; this one is removed from the DOM every
- * time the bar is dismissed -- measured, the node is gone about 300ms after the
- * close begins -- and a fresh element gets a fresh animation.
+ * time the bar is dismissed, and a fresh element gets a fresh animation.
  *
  * `!important` because the sheet is at user origin, where a normal declaration
- * loses to the page's own. Overriding an animation is what the drawer's note
- * above warns against, and there is nothing here to override: WhatsApp declares
- * no animation on this panel -- computed animation-name: none, measured -- and
- * springs the bar open from JavaScript instead.
+ * loses to the page's own. There is nothing here to override: WhatsApp
+ * declares no CSS animation on this panel -- computed animation-name: none,
+ * measured -- and its own motion comes from script.
  */
 const PANEL_MOUNT = `
 footer [data-testid="popup_panel"] {
