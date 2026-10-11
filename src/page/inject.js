@@ -30,6 +30,7 @@ const arabicDigits = require('./arabic-digits.js');
 const navigation = require('./navigation.js');
 const motion = require('./motion.js');
 const wallpaper = require('./wallpaper.js');
+const warmup = require('./warmup.js');
 
 const SEP = '\u001f';   // joins the parts of an answer; occurs in no chat name
 
@@ -1894,6 +1895,7 @@ const start = ({ send, on }) => {
   let adoptConversation = () => {};
   const doodles = wallpaper.start({ log, window });
   navigation.start({ press, log, window, prepareChat: () => { adoptConversation(); doodles.scan(); } });
+  warmup.start({ log, window });
 
   /* Answers the app's one question at notification time: what just arrived, and
      was it the conversation already on screen? The reply is the chat, the sender,
