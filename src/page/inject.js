@@ -2935,6 +2935,11 @@ const start = ({ send, on }) => {
   const ARRIVAL_POP_SCALE = 0.12;
   const ARRIVAL_POP_TRAVEL = 64;
   const ARRIVAL_SETTLE_MS = 160;
+  /* More new rows than this below the newest one seen is a render, not
+     messages landing -- the same eight the pending queue keeps. */
+  const ARRIVAL_BURST = 8;
+  /* And with no row seen at all, the first message of an empty chat at most. */
+  const ARRIVAL_FIRST_ROWS = 2;
   const ARRIVAL_PIN_SLACK = 3;
   const ARRIVAL_ADOPT_MS = 600;
 
@@ -3222,8 +3227,33 @@ const start = ({ send, on }) => {
       if (!candidates.size) return;
       const rows = list.querySelectorAll('[role="row"]');
       if (!candidates.has(rows[rows.length - 1])) return;
+      /*
+       * Only what lands BELOW the newest message already seen is arriving.
+       *
+       * A conversation opened for the first time in a session holds one row
+       * -- its last message, the one the chat list shows -- and fetches the
+       * rest from the local store a moment later. Measured on the live
+       * client: the row at +101ms, the history (22 rows) at +292ms, and the
+       * time rule above let it through, 130ms past the settle. The batch
+       * touched the tail (the history is rendered afresh, the last row with
+       * it) and every message in it was new to this list, so seven old
+       * messages popped into place at once as though they had just been sent
+       * -- the "the opening animation breaks" the owner reported.
+       *
+       * A history fill keeps the newest message where it was and puts the
+       * rest ABOVE it; an arrival puts something below it. So the rows after
+       * the newest one already seen are the only candidates, and a batch with
+       * no row seen at all -- a different conversation in a reused list, a
+       * jump to the latest messages -- is a render unless it is one or two
+       * rows, which is the first message of an empty chat.
+       */
+      let newest = rows.length - 1;
+      while (newest >= 0 && !shown.has(nameOf(rows[newest]))) newest--;
+      const landing = new Set();
+      for (let i = newest + 1; i < rows.length; i++) landing.add(rows[i]);
+      const arriving = landing.size <= (newest < 0 ? ARRIVAL_FIRST_ROWS : ARRIVAL_BURST);
       const now = performance.now();
-      const canPlay = now - since >= ARRIVAL_SETTLE_MS && !stillnessAsked() &&
+      const canPlay = arriving && now - since >= ARRIVAL_SETTLE_MS && !stillnessAsked() &&
         document.visibilityState === 'visible';
       for (const row of candidates) {
         if (!row.isConnected || !list.contains(row)) continue;
@@ -3233,7 +3263,7 @@ const start = ({ send, on }) => {
         if (shown.size > 400) shown.delete(shown.values().next().value);
         /* Remember hidden and opening messages too, so an acknowledgement or
            returning to the window cannot replay an already displayed message. */
-        if (canPlay) pending.push({ row, at: now });
+        if (canPlay && landing.has(row)) pending.push({ row, at: now });
       }
       pending = pending.slice(-8);
       if (pending.length) backstop();
