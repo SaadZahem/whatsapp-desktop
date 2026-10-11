@@ -108,8 +108,8 @@ the latest release.
   the client also looks once a day by itself, and the tray item names the
   version when there is one to name. It never installs anything — your package
   manager does that, and the site has the command for your distribution.
-- **It moves better than the browser it is.** Four things, all measured rather
-  than guessed. The conversation scrolls on the GPU: Chromium's Linux driver
+- **It moves better than the browser it is.** All of it measured rather than
+  guessed. The conversation scrolls on the GPU: Chromium's Linux driver
   blocklist is years out of date and decides against compositing on hardware
   that is fine, which turns every wheel tick into a software raster of the whole
   viewport — that is overridden, the messages list is put on a layer of its own,
@@ -120,30 +120,37 @@ the latest release.
   own fades and slides on those panels are let through with no duration, so the
   two never share a panel and push it back onto the main thread, and a section
   that swaps its loading page for its list keeps the reveal it already has
-  instead of fading in twice. The chat wallpaper's doodles are drawn once, into
-  a bitmap at the screen's own scale, rather than from 360 stroked paths in
-  every chat — that alone was 75ms of GPU raster landing in the middle of each
-  chat's entrance. And the reply bar and the conversation above
-  it now rise as one: WhatsApp animates the bar from JavaScript every frame
-  while the messages follow a watcher two frames behind, so the bar grew for
-  73ms and the messages then jumped 66px in a single frame — both halves are
-  taken over and released together, and the last row now travels that 66px in 21
-  to 23 steps. And a message landing in the conversation on screen no longer
-  arrives by teleport: WhatsApp appends the row and scrolls by exactly its
-  height in the same frame, so the whole conversation used to step up 55px at
-  once — it now glides that distance while the new bubble grows out of its own
-  bottom corner, the corner measured from the box so an Arabic conversation pops
-  from the other side. And jumping to a message — the pinned one at the top of a
-  chat, a quoted reply, a search result — now ends on the message rather than a
-  screenful past it. WhatsApp scrolls twice: once instantly, to bring the message
-  onto the screen, and then a 400ms settle that centres it. The settle works out
-  where it is going the moment it starts, while the rows above the message are
-  still being rendered, so it scrolls faithfully to a measurement of a
-  conversation that no longer exists: the message went from 35px below the top of
-  the room to 1304px above it. It is run again here instead, on WhatsApp's own
-  curve and to WhatsApp's own destination, but against a measurement taken every
-  frame — so the second and third pinned messages of a chat land as squarely as
-  the first. None of it is a setting: it is how the client draws a page.
+  instead of fading in twice. A first visit no longer looks like one: WhatsApp
+  fetches a section's code the first time it is opened, a round trip to its
+  server behind a spinner, so the sections are loaded ahead, at idle, a few
+  seconds after the client starts, and a chat's history starts loading the
+  moment the pointer rests on its row. The chat wallpaper's doodles are drawn
+  once, into a bitmap at the screen's own scale, rather than from 360 stroked
+  paths in every chat — that alone was 75ms of GPU raster landing in the middle
+  of each chat's entrance. And the reply bar and the conversation above it move
+  as one: WhatsApp grows and shrinks the bar's height on every frame and hands
+  the conversation its room only once that is over, so the bar was dismissed and
+  the conversation then dropped 72px in a single frame. Its animation now
+  finishes on the spot and the bar's card slides out from behind the composer
+  with the messages rising beside it, and back down with them when it is
+  dismissed; send the reply and the card fades as the message comes up in its
+  place, the conversation moving once, by the difference between the two. And a
+  message landing in the conversation on screen no longer arrives by teleport:
+  WhatsApp appends the row and scrolls by exactly its height in the same frame,
+  so the whole conversation used to step up 55px at once — it now glides that
+  distance while the new bubble grows out of its own bottom corner, the corner
+  measured from the box so an Arabic conversation pops from the other side. And
+  jumping to a message — the pinned one at the top of a chat, a quoted reply, a
+  search result — now ends on the message rather than a screenful past it.
+  WhatsApp scrolls twice: once instantly, to bring the message onto the screen,
+  and then a 400ms settle that centres it. The settle works out where it is
+  going the moment it starts, while the rows above the message are still being
+  rendered, so it scrolls faithfully to a measurement of a conversation that no
+  longer exists: the message went from 35px below the top of the room to 1304px
+  above it. It is run again here instead, on WhatsApp's own curve and to
+  WhatsApp's own destination, but against a measurement taken every frame — so
+  the second and third pinned messages of a chat land as squarely as the first.
+  None of it is a setting: it is how the client draws a page.
   There are deliberately **no** custom scrollbars — one `::-webkit-scrollbar`
   rule takes a scroller off Chromium's composited path and puts it back on the
   main thread, and that is a cosmetic gain paid for in frames.
