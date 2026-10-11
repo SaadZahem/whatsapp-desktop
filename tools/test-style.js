@@ -254,9 +254,13 @@ assert.doesNotMatch(shipped, /\[data-testid="drawer-(?:left|middle)"\] > div > s
 /* What it still does: the retiring panel is hidden on the spot, so two
    sections never overlap, and the surface sits on the CONTAINER while a panel
    is up -- on the panel it would fade with it and show the chat list through. */
-assert.match(shipped, /\[data-wa-navigation-panel="inactive"\] \{\n  visibility: hidden !important;/);
-assert.match(shipped, /\[data-testid="drawer-left"\] > div > span:has\(> \[data-wa-navigation-panel="active"\]\)/);
-assert.match(shipped, /\[data-testid="drawer-middle"\] > div > span:has\(> \[data-wa-navigation-panel="active"\]\)[^{]*\{\n  background-color:/);
+assert.match(shipped, /\[data-wa-navigation-panel="inactive"\],\n\[data-wa-navigation-panel="waiting"\],\n\[data-wa-navigation-panel="pending"\] \{\n  visibility: hidden !important;/);
+const surfaced = /:has\(> :is\(\[data-wa-navigation-panel="active"\], \[data-wa-navigation-panel="pending"\]\)\)/.source;
+assert.match(shipped, new RegExp(/\[data-testid="drawer-left"\] > div > span/.source + surfaced));
+assert.match(shipped, new RegExp(/\[data-testid="drawer-middle"\] > div > span/.source + surfaced + /[^{]*\{\n  background-color:/.source));
+/* A first visit's stand-in is kept out of sight, and between two sections it
+   holds the surface: the chat list never shows through on the way. */
+assert.doesNotMatch(shipped, /span:has\(> :is\([^)]*"waiting"/, 'a stand-in held over Chats leaves the chat list showing');
 /* The media hub keeps its short rise. */
 assert.match(shipped, /\[data-testid="media-hub-modal"\] \{\n    animation: whatsapp-desktop-media 160ms/);
 

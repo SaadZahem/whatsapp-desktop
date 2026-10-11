@@ -11,6 +11,9 @@ const rig = ({ reduced = false, rtl = false, registry = true, beforeHtml = false
   let meList = null;
   let panelNodes = [], bodyReady = true;
   let messageKey = '';
+  /* What WhatsApp's store says about the open chat's history, and how many
+     rows the conversation draws. */
+  let history = null, rowCount = 1;
   let animations = [], presses = 0, timers = [], frames = [], restores = 0;
   let clock = 1000;
   const restore = { cancelPendingLastActiveChatRestore: () => cancelled++,
@@ -18,6 +21,8 @@ const rig = ({ reduced = false, rtl = false, registry = true, beforeHtml = false
   const animatedElement = name => ({
     name, isConnected: true, attributes: {},
     setAttribute(key, value) { this.attributes[key] = value; },
+    getAttribute(key) { return this.attributes[key] ?? null; },
+    removeAttribute(key) { delete this.attributes[key]; },
     animate(frames, options) {
       const a = { target: this, frames, options, cancel() { this.cancelled = true; this.playState = 'idle'; } };
       if (preparation) {
@@ -44,8 +49,9 @@ const rig = ({ reduced = false, rtl = false, registry = true, beforeHtml = false
   };
   const chats = makeButton('wds-ic-chat-filled');
   const section = makeButton('wds-ic-communities');
+  const other = makeButton('wds-ic-status');
   selected = chats;
-  const root = { querySelectorAll: () => [chats, section], contains: e => e === chats || e === section };
+  const root = { querySelectorAll: () => [chats, section, other], contains: e => e === chats || e === section || e === other };
   const mediaButton = makeButton('ic-close');
   const mediaPanel = {
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600 }),
@@ -78,7 +84,8 @@ const rig = ({ reduced = false, rtl = false, registry = true, beforeHtml = false
     },
     require: name => {
       if (!registry) throw new Error('private module renamed');
-      if (name === 'WAWebChatCollection') return { ChatCollection: { getActive: () => active ? { id: active } : null } };
+      if (name === 'WAWebChatCollection') return { ChatCollection: { getActive: () => active
+        ? { id: active, ...(history ? { msgs: { length: history.length, msgLoadState: history } } : {}) } : null } };
       if (name === 'WAWebSideNavButtonsActivityModel') return { setLastActiveChat: value => { last = value; } };
       if (name === 'WAWebOpenLastActiveChatAction') return restore;
       return null;
@@ -105,6 +112,7 @@ const rig = ({ reduced = false, rtl = false, registry = true, beforeHtml = false
       if (!main || replace) {
         const body = animatedElement('body'), messages = animatedElement('messages'), header = animatedElement('header'), footer = animatedElement('footer');
         messages.querySelector = () => ({ getAttribute: () => messageKey });
+        messages.querySelectorAll = () => new Array(rowCount).fill({});
         main = animatedElement('frame');
         main.querySelector = selector => selector.includes('conversation-panel-body') ? (bodyReady ? body : null)
           : selector.includes('conversation-panel-messages') ? (bodyReady ? messages : null)
@@ -133,14 +141,16 @@ const rig = ({ reduced = false, rtl = false, registry = true, beforeHtml = false
     hide: () => { document.visibilityState = 'hidden'; handlers.visibilitychange(); },
     mutate: target => update([{ type: 'childList', target }]),
     selectSection: () => { selected = section; update(); },
-    addPanel: (placeholder = false, page = 'section-drawer') => {
+    addPanel: (placeholder = false, page = 'section-drawer', behind = false) => {
       const panel = animatedElement('panel');
       panel.closest = () => sectionContainer;
       panel.firstElementChild = animatedElement('panel-content');
       panel.page = page;
       panel.querySelector = () => panel.page === null ? null
-        : { getAttribute: () => panel.page, matches: () => placeholder };
-      panelNodes.unshift(panel); update(); return panel;
+        : { getAttribute: () => panel.page,
+            matches: selector => selector.includes('loading-spinner') ? panel.page === 'loading-spinner' : placeholder };
+      if (behind) panelNodes.push(panel); else panelNodes.unshift(panel);
+      update(); return panel;
     },
     showPage: (panel, page) => { panel.page = page; update(); },
     pointer: () => handlers.pointerdown({}),
@@ -148,6 +158,11 @@ const rig = ({ reduced = false, rtl = false, registry = true, beforeHtml = false
     settle: () => animations.forEach(a => { if (a.playState !== 'idle') a.playState = 'finished'; }),
     removePanel: panel => { panel.isConnected = false; panelNodes = panelNodes.filter(p => p !== panel); update(); },
     setBodyReady: ready => { bodyReady = ready; update(); },
+    setHistory: state => { history = state; },
+    setRows: n => { rowCount = n; },
+    clickSection: () => handlers.click({ target: section }),
+    clickOther: () => handlers.click({ target: other }),
+    selectOther: () => { selected = other; update(); },
     setListReady: ready => { list.firstElementChild = ready ? {} : null; update(); },
     setLayer: on => { layers = on ? [{ contains: () => false, getBoundingClientRect: () => ({ width: 20, height: 20 }), getClientRects: () => [1] }] : []; },
     setMedia: on => { media = on; },
@@ -365,6 +380,138 @@ assert.ok(!rapidClose.state.last, 'closing then changing tabs before paint canno
   assert.equal(calls[3].options.duration, 120, 'an animation of anything but motion is not the panel transition, and is left alone');
   panel.animate({ opacity: [0.5, 1] }, 50);
   assert.deepEqual(calls[4].options, { duration: 0, fill: 'none' }, 'the property-indexed form with a bare duration is the same fade');
+}
+
+/* A section's first visit. WhatsApp stands its loading drawer in for a
+   section whose code is still coming -- 40-80ms with the code in the page --
+   and on Channels and Communities an empty wrapper, with the old section
+   already taken down. Measured: the spinner flashed, and between two sections
+   the chat list showed through for 60-130ms. */
+{
+  const quick = rig();
+  quick.clickSection(); quick.selectSection();
+  const spinner = quick.addPanel(false, 'loading-spinner');
+  assert.equal(spinner.attributes['data-wa-navigation-panel'], 'waiting', 'the loading drawer is kept out of sight');
+  assert.equal(quick.state.animations.length, 0, 'and nothing moves for it');
+  quick.later(60); quick.showPage(spinner, 'status-tab-drawer');
+  assert.equal(spinner.attributes['data-wa-navigation-panel'], 'active');
+  assert.equal(quick.state.animations.at(-1).target, spinner, 'the section is revealed the moment it replaces the stand-in');
+
+  const slow = rig();
+  slow.clickSection(); slow.selectSection();
+  const loading = slow.addPanel(false, 'loading-spinner');
+  slow.later(320); slow.drain();
+  assert.equal(loading.attributes['data-wa-navigation-panel'], 'active', 'a loading drawer still up after its grace is shown');
+  assert.equal(slow.state.animations.length, 0, 'standing still: a spinner fading in is two motions for one wait');
+  slow.later(1500); slow.showPage(loading, 'status-tab-drawer');
+  assert.equal(slow.state.animations.length, 1, 'the section it stood in for gets its reveal however long it took');
+
+  const between = rig();
+  between.clickSection(); between.selectSection();
+  const status = between.addPanel(false, 'status-tab-drawer');
+  between.clickOther(); between.removePanel(status); between.selectOther();
+  const empty = between.addPanel(false, null);
+  assert.equal(empty.attributes['data-wa-navigation-panel'], 'pending',
+    'between two sections the surface is held: the chat list never shows through on the way');
+  between.showPage(empty, 'newsletter-tab-drawer');
+  assert.equal(empty.attributes['data-wa-navigation-panel'], 'active');
+  assert.equal(between.state.animations.at(-1).target, empty);
+
+  const fromChats = rig();
+  fromChats.clickSection(); fromChats.selectSection();
+  const blank = fromChats.addPanel(false, null);
+  assert.ok(!blank.attributes['data-wa-navigation-panel'],
+    'from Chats an empty wrapper takes nothing over: the list the eye is on stays until the section is there');
+
+  const kept = rig();
+  kept.clickSection(); kept.selectSection();
+  const old = kept.addPanel(false, 'status-tab-drawer');
+  kept.clickOther(); kept.selectOther();
+  assert.equal(old.attributes['data-wa-navigation-panel'], 'active', 'the page on screen stays while the next is being built');
+  const next = kept.addPanel(false, 'newsletter-tab-drawer');
+  assert.equal(old.attributes['data-wa-navigation-panel'], 'inactive', 'and goes in the frame the next one is up');
+  assert.equal(next.attributes['data-wa-navigation-panel'], 'active');
+
+  const stuck = rig();
+  stuck.clickSection(); stuck.selectSection();
+  stuck.clickOther(); stuck.selectOther();
+  const late = stuck.addPanel(false, null);
+  assert.equal(late.attributes['data-wa-navigation-panel'], 'pending');
+  stuck.later(800); stuck.drain();
+  assert.equal(late.attributes['data-wa-navigation-panel'], 'active', 'nothing is held for long: whatever is there is shown');
+
+  /* A wrapper seen first behind the page on screen, then left in front when
+     that page goes: its wait is timed from then, and ends. */
+  const sibling = rig();
+  sibling.clickSection(); sibling.selectSection();
+  const shown = sibling.addPanel(false, 'status-tab-drawer');
+  const behind = sibling.addPanel(false, 'loading-spinner', true);
+  assert.equal(behind.attributes['data-wa-navigation-panel'], 'inactive');
+  sibling.removePanel(shown);
+  assert.equal(behind.attributes['data-wa-navigation-panel'], 'pending',
+    'the page it stood behind gone, the surface is held rather than the chat list shown');
+  sibling.later(320); sibling.drain();
+  assert.equal(behind.attributes['data-wa-navigation-panel'], 'active', 'and its grace runs out like any other');
+
+  /* A section that never draws in these drawers does not leave the old one
+     standing over it. */
+  const elsewhere = rig();
+  elsewhere.clickSection(); elsewhere.selectSection();
+  const stays = elsewhere.addPanel(false, 'status-tab-drawer');
+  elsewhere.clickOther(); elsewhere.selectOther();
+  assert.equal(stays.attributes['data-wa-navigation-panel'], 'active');
+  elsewhere.later(800); elsewhere.drain();
+  assert.equal(stays.attributes['data-wa-navigation-panel'], 'inactive', 'past the longest hold the old section goes');
+}
+
+/* A conversation whose history is still on its way. WhatsApp keeps one
+   message per chat in memory and fetches the rest as the chat opens: the
+   entrance ran on that one row and a spinner, and the history then simply
+   appeared. */
+{
+  const idle = { isLoadingEarlierMsgs: false, isLoadingRecentMsgs: false, isLoadingAroundMsgs: false, noEarlierMsgs: false };
+  const coming = rig({ scheduled: true, preparation: true });
+  coming.setHistory({ ...idle, length: 1 }); coming.setRows(1);
+  coming.open('a'); coming.paint();
+  const [held, ...rest] = coming.state.animations;
+  assert.equal(held.target.name, 'messages');
+  assert.deepEqual([held.frames[0].opacity, held.playState], [0, 'paused'], 'the messages wait out of sight');
+  assert.deepEqual(rest.map(a => a.target.name), ['header', 'footer']);
+  coming.setHistory({ ...idle, length: 1, isLoadingEarlierMsgs: true }); coming.paint();
+  assert.ok(rest.every(a => a.played), 'the header and composer make their entrance meanwhile');
+  assert.equal(held.playState, 'paused', 'while the history loads, the messages hold');
+  coming.setHistory({ ...idle, length: 22 }); coming.paint();
+  assert.equal(held.playState, 'paused', 'the store having it is not the screen having it');
+  coming.setRows(22); coming.paint();
+  assert.ok(held.played, 'the messages rise in when their rows land');
+
+  const none = rig({ scheduled: true, preparation: true });
+  none.setHistory({ ...idle, length: 3 }); none.open('a'); none.paint(); none.paint();
+  none.later(200); none.paint();
+  assert.ok(none.state.animations[0].played, 'a load that never begins holds nothing for long');
+
+  const slowLoad = rig({ scheduled: true, preparation: true });
+  slowLoad.setHistory({ ...idle, length: 1, isLoadingEarlierMsgs: true }); slowLoad.open('a'); slowLoad.paint(); slowLoad.paint();
+  slowLoad.later(700); slowLoad.paint();
+  assert.ok(slowLoad.state.animations[0].played, 'a slow fetch is shown as it is -- spinner and all -- past the hold');
+
+  const loaded = rig({ scheduled: true, preparation: true });
+  loaded.setHistory({ ...idle, length: 51 }); loaded.open('a'); loaded.paint();
+  assert.equal(loaded.state.animations[0].frames[0].transform, 'translate3d(14px, 0, 0)',
+    'a chat whose history is in memory makes its usual entrance');
+
+  const switching = rig({ scheduled: true, preparation: true });
+  switching.setHistory({ ...idle, length: 51 }); switching.open('a'); switching.paint(); switching.paint();
+  switching.setHistory({ ...idle, length: 1 }); switching.open('b'); switching.paint();
+  const swap = switching.state.animations.slice(3);
+  assert.equal(swap[0].frames[0].opacity, 0, 'switching to a chat not yet loaded holds its messages too');
+  assert.equal(swap[0].playState, 'paused');
+  switching.open('c'); switching.paint();
+  assert.ok(swap[0].cancelled, 'a rapid switch lets go of the held messages with the rest');
+
+  const hidden = rig({ scheduled: true, preparation: true });
+  hidden.setHistory({ ...idle, length: 1 }); hidden.open('a'); hidden.paint(); hidden.hide();
+  assert.ok(hidden.state.animations[0].cancelled, 'a window going away shows the messages as they are');
 }
 
 console.log('navigation checks pass');

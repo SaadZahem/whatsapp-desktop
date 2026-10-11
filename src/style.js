@@ -757,14 +757,22 @@ footer [data-testid="popup_panel"] {
  * What the sheet still does: the retiring panel is hidden on the spot, so two
  * sections never overlap; and the surface goes on the CONTAINER while a panel
  * is up, so the chat list underneath cannot show through one that is fading
- * in. On the panel itself that colour would fade with it. */
+ * in. On the panel itself that colour would fade with it.
+ *
+ * Two more states come from a section's first visit, when WhatsApp mounts a
+ * stand-in before the section's code is ready (navigation.js says when):
+ * "waiting" keeps its loading drawer out of sight for a moment, and "pending"
+ * does the same while holding the surface, so moving from one section to
+ * another never shows the chat list in between. */
 const SETTINGS_PANEL = `
-[data-wa-navigation-panel="inactive"] {
+[data-wa-navigation-panel="inactive"],
+[data-wa-navigation-panel="waiting"],
+[data-wa-navigation-panel="pending"] {
   visibility: hidden !important;
   pointer-events: none !important;
 }
-[data-testid="drawer-left"] > div > span:has(> [data-wa-navigation-panel="active"]),
-[data-testid="drawer-middle"] > div > span:has(> [data-wa-navigation-panel="active"]) {
+[data-testid="drawer-left"] > div > span:has(> :is([data-wa-navigation-panel="active"], [data-wa-navigation-panel="pending"])),
+[data-testid="drawer-middle"] > div > span:has(> :is([data-wa-navigation-panel="active"], [data-wa-navigation-panel="pending"])) {
   background-color: var(--WDS-surface-default, var(--background-default));
 }
 @media (prefers-reduced-motion: no-preference) {
