@@ -41,6 +41,40 @@ const start = ({ log = () => {}, window: view = window } = {}) => {
 
   const keyOf = (url, size, scale) => `${url} ${size} @${scale}`;
 
+  /* The first chat after a start came up without its doodles for its first
+     two frames -- measured, the bare dark base and then the pattern, where
+     every later chat had it from its first frame. Chromium decodes an image
+     the first time it rasters it, off the frame, and draws that frame without
+     it; a mask missing is a mask that hides everything. `img.decode()` did not
+     change it (measured: the same two frames), because the raster keeps its
+     own cache. Painting the mask once did: a single pixel at the corner of the
+     window, at almost no alpha, carrying each bitmap at the size the chat
+     draws it, and the first chat's first frame had the pattern. */
+  const probes = new Map();
+  const paintAhead = scale => {
+    try { paintEach(scale); } catch (err) { /* the doodles still draw, a frame late */ }
+  };
+  const paintEach = scale => {
+    const parent = doc.body || doc.documentElement;
+    if (!parent) return;
+    for (const [key, png] of drawn) {
+      const [, size, at] = key.split(' ');
+      let probe = probes.get(png);
+      if (at !== '@' + scale) { if (probe) { probe.remove(); probes.delete(png); } continue; }
+      if (!probe) {
+        const [width, height] = size.split('x');
+        probe = doc.createElement('div');
+        probe.setAttribute('aria-hidden', 'true');
+        probe.style.cssText = 'position: fixed; left: 0; top: 0; width: 1px; height: 1px; ' +
+          'pointer-events: none; background: rgba(0, 0, 0, 0.004); ' +
+          `mask-image: url("${png}"); -webkit-mask-image: url("${png}"); ` +
+          `mask-size: ${width}px ${height}px; -webkit-mask-size: ${width}px ${height}px;`;
+        probes.set(png, probe);
+      }
+      if (!probe.isConnected) parent.appendChild(probe);
+    }
+  };
+
   const publish = () => {
     const head = doc.head || doc.documentElement;
     if (!head) return;
@@ -51,6 +85,7 @@ const start = ({ log = () => {}, window: view = window } = {}) => {
     }
     const scale = view.devicePixelRatio || 1;
     const rules = [];
+    paintAhead(scale);
     for (const [key, png] of drawn) {
       const [url, size, at] = key.split(' ');
       if (at !== '@' + scale) continue;
@@ -95,6 +130,7 @@ const start = ({ log = () => {}, window: view = window } = {}) => {
     /* A rule restored at document start may have had no head to go in, or
        gone with the html element the parser replaced. */
     if (drawn.size && (!sheet || !sheet.isConnected)) publish();
+    else if (drawn.size) paintAhead(scale);
     for (const overlay of doc.querySelectorAll(OVERLAY)) {
       const inline = overlay.getAttribute('style') || '';
       const match = SVG_MASK.exec(inline);

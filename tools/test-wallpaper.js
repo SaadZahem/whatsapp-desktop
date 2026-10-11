@@ -26,7 +26,11 @@ const rig = ({ scale = 1.4, fetchFails = false, cached = [] } = {}) => {
       width: 0, height: 0,
       getContext: () => ({ drawImage(img, x, y, w, h) { drawnSizes.push([w, h]); } }),
       toBlob(cb, type) { cb({ type, bytes: this.width * this.height }); },
-    } : { tag, textContent: '', isConnected: false },
+    } : {
+      tag, textContent: '', isConnected: false, style: {}, attributes: {},
+      setAttribute(name, value) { this.attributes[name] = value; },
+      remove() { this.isConnected = false; head.children = head.children.filter(el => el !== this); },
+    },
     querySelectorAll: selector => {
       assert.equal(selector, OVERLAY);
       return overlays;
@@ -60,6 +64,7 @@ const rig = ({ scale = 1.4, fetchFails = false, cached = [] } = {}) => {
   return {
     wallpaper, overlays, idle, logs, fetched, drawnSizes, store,
     sheet: () => head.children.find(el => el.id === 'whatsapp-desktop-wallpaper'),
+    probes: () => head.children.filter(el => el.tag === 'div'),
     runIdle: async () => { while (idle.length) idle.shift()(); for (let i = 0; i < 5; i++) await settle(); },
     settle,
   };
@@ -116,6 +121,20 @@ const rig = ({ scale = 1.4, fetchFails = false, cached = [] } = {}) => {
   await relaunch.wallpaper.restored;
   const restoredRule = relaunch.sheet().textContent;
   assert.equal((restoredRule.match(/\[style\*=/g) || []).length, 1, 'only the bitmap drawn at this screen\'s scale is restored');
+  /* And painted once at the corner, so the raster has it decoded before the
+     first chat: without it that chat's first two frames came up bare. One
+     pixel, at the size the chat draws it, out of the pointer's way. */
+  const [probe, ...extra] = relaunch.probes();
+  assert.ok(probe && !extra.length, 'one probe for the one bitmap at this scale');
+  assert.match(probe.style.cssText, /width: 1px; height: 1px;/);
+  assert.match(probe.style.cssText, /pointer-events: none;/);
+  assert.match(probe.style.cssText, /mask-image: url\("blob:https:\/\/web\.whatsapp\.com\/\d+"\);/);
+  assert.match(probe.style.cssText, /mask-size: 540px 960px;/, 'decoded at the size the conversation asks for');
+  assert.equal(probe.attributes['aria-hidden'], 'true');
+  /* The parser can replace the element it hung from; the next scan puts it back. */
+  probe.remove();
+  relaunch.wallpaper.scan();
+  assert.ok(relaunch.probes()[0] === probe && probe.isConnected, 'a probe that was taken away is put back');
   relaunch.overlays.push({ getAttribute: () => doodleStyle(SVG) });
   relaunch.wallpaper.scan();
   await relaunch.runIdle();
