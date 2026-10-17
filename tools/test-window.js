@@ -52,6 +52,11 @@ const build = ({ wayland = true, strategy = 'auto' } = {}) => {
       state.visible = true;
       win.emit('show');
     },
+    maximize() {
+      calls.push('maximize');
+      state.visible = true;
+      win.emit('show');
+    },
     restore() {
       calls.push('restore');
       state.minimized = false;
@@ -83,7 +88,8 @@ const build = ({ wayland = true, strategy = 'auto' } = {}) => {
     clearTimeout(id) { timers.delete(id); },
   });
   vm.runInContext(controller + '\ntraceWindowState();\n' +
-    'globalThis.controls = { show: showWindow, click: showWindowForClick, hide: hideWindow };',
+    'globalThis.controls = { show: showWindow, click: showWindowForClick, hide: hideWindow,\n' +
+    '  leftMaximized: () => { openMaximized = true; } };',
   context, { filename: 'main.js (window controller)' });
 
   const tick = duration => {
@@ -352,27 +358,67 @@ const build = ({ wayland = true, strategy = 'auto' } = {}) => {
    config kept in git sees that write as a change on every close -- so with
    remember-size off the size must not be touched, and the zoom still must. */
 {
-  const close = remember => {
-    const values = { 'window.remember-size': remember, 'window.width': 1200, 'window.height': 800 };
+  const close = (remember, maximized = false, noted = true) => {
+    const values = { 'window.remember-size': remember, 'window.maximized': false,
+                     'window.width': 1200, 'window.height': 800 };
     let saves = 0;
     const context = vm.createContext({
       config: { get: key => values[key], set: (key, value) => { values[key] = value; }, save: () => saves++ },
       win: {
         isDestroyed: () => false,
-        getBounds: () => ({ x: 0, y: 0, width: 958, height: 1047 }),
+        isMaximized: () => maximized,
+        isMinimized: () => false,
+        isFullScreen: () => false,
+        getBounds: () => maximized ? { x: 0, y: 0, width: 2560, height: 1373 }
+                                   : { x: 0, y: 0, width: 958, height: 1047 },
+        /* What X11 answers: the maximised size, not the one it goes back to. */
+        getNormalBounds: () => ({ x: 0, y: 0, width: 2560, height: 1373 }),
         webContents: { getZoomFactor: () => 1.1 },
       },
       electronScreen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1920, height: 1080 } }) },
     });
-    vm.runInContext(controller + '\nglobalThis.keep = keepWindowState;', context,
+    vm.runInContext(controller + '\nglobalThis.keep = keepWindowState;' +
+                    '\nglobalThis.note = noteNormalSize;', context,
                     { filename: 'main.js (window controller)' });
+    /* The window at its own size, then maximised by the window manager: the
+       resize that maximises it is not noted. */
+    if (noted) {
+      const was = maximized;
+      maximized = false; context.note();
+      maximized = was; context.note();
+    }
     context.keep();
-    return { size: [values['window.width'], values['window.height']], zoom: values['view.zoom'], saves };
+    return { size: [values['window.width'], values['window.height']],
+             maximized: values['window.maximized'], zoom: values['view.zoom'], saves };
   };
   check('a close writes the size the window manager gave it, by default',
-        close(true), { size: [958, 1047], zoom: 1.1, saves: 1 });
+        close(true), { size: [958, 1047], maximized: false, zoom: 1.1, saves: 1 });
+  check('a maximised window is written down as maximised, with the size it un-maximises to',
+        close(true, true), { size: [958, 1047], maximized: true, zoom: 1.1, saves: 1 });
   check('with remember-size off, the size in the file is left as it was',
-        close(false), { size: [1200, 800], zoom: 1.1, saves: 1 });
+        close(false), { size: [1200, 800], maximized: false, zoom: 1.1, saves: 1 });
+  check('and so is whether it was maximised',
+        close(false, true), { size: [1200, 800], maximized: false, zoom: 1.1, saves: 1 });
+}
+
+/* Opened the way it was left: the first show of a window left maximised is a
+   maximize(), which maps it maximised in one go, and only the first -- a window
+   the owner has since un-maximised is shown as it is. */
+for (const wayland of [false, true]) {
+  const t = build({ wayland });
+  t.leftMaximized();
+  t.show('the client started');
+  t.focus();
+  t.tick(1000);
+  check(`${wayland ? 'Wayland' : 'X11'}: the first show of a window left maximised maximises it`,
+        t.calls.filter(call => call === 'maximize' || call === 'show'), ['maximize']);
+  t.hide();
+  t.calls.length = 0;
+  t.show('the tray was asked for it');
+  t.focus();
+  t.tick(1000);
+  check(`${wayland ? 'Wayland' : 'X11'}: and a later show is a plain show`,
+        t.calls.filter(call => call === 'maximize' || call === 'show'), ['show']);
 }
 
 console.log(failures ? `\n${failures} window check(s) failed` : '\nwindow checks pass');

@@ -346,16 +346,56 @@ const clampToScreen = (width, height) => {
   };
 };
 
+/* The window was left maximised, and has not been put up since. Set when it is
+   made, spent on its first show. */
+let openMaximized = false;
+
+/* The size a maximised window goes back to, kept by hand. Electron has
+   getNormalBounds() for it, and on Wayland it answers; on X11, measured in a
+   nested GNOME 50 shell, it answered the maximised size whenever the window
+   manager had done the maximising -- which is every time, from a double click
+   on the title or Super+Up -- so un-maximising a window opened that way went
+   back to the whole screen. Every size the window has while it is not
+   maximised is its own, so the last of those is the answer. */
+let normalSize = null;
+const noteNormalSize = () => {
+  if (!win || win.isDestroyed() || win.isMaximized() || win.isMinimized() || win.isFullScreen()) return;
+  const { width, height } = win.getBounds();
+  normalSize = { width, height };
+};
+
+/* Up, and maximised the first time if that is how it was left. maximize() on a
+   window that is not up yet maps it maximised, in one go -- where showing it
+   and then maximising would draw it at its own size for a frame and then
+   jump. And on the first show rather than when the window is made, because
+   maximize() puts a window up, and a client started into the tray stays
+   there. */
+const putUp = () => {
+  if (openMaximized) {
+    openMaximized = false;
+    win.maximize();
+    return;
+  }
+  win.show();
+};
+
 /* What closing the window writes back. The size is as much the window
    manager's answer as the owner's -- a tiling one picks it -- and writing that
    down on every close makes a config file that changes each time it is used,
    which is noise in one kept under version control. With remember-size off the
-   window opens at the width and height the file holds, and they are never
-   written. The zoom is kept either way: only the owner ever changes it. */
+   window opens the way the file says, and nothing here is written. The zoom is
+   kept either way: only the owner ever changes it.
+
+   A maximised window is written down as maximised, with the size it had before
+   -- not as a window the size of the screen. That is what used to happen: the
+   owner's config read 2560x1373, so the client came back covering the screen
+   without being maximised, and un-maximising it had nowhere smaller to go. */
 const keepWindowState = () => {
   if (!win || win.isDestroyed()) return;
   if (config.get('window.remember-size') !== false) {
-    const bounds = win.getBounds();
+    const maximized = win.isMaximized();
+    const bounds = maximized ? normalSize || win.getNormalBounds() : win.getBounds();
+    config.set('window.maximized', maximized);
     config.set('window.width', bounds.width);
     config.set('window.height', bounds.height);
   }
@@ -659,7 +699,7 @@ const remapWindow = () => {
    * is merely maximised would un-maximise it. */
   if (win.isMinimized()) win.restore();
 
-  win.show();
+  putUp();
   win.focus();
   /* Cleared a turn later, so that the events the show and the focus raise both
      find the trick still in progress. */
@@ -681,7 +721,7 @@ const remapWindow = () => {
  * window still in the dock is one show() alone would leave there. */
 const activateWindow = () => {
   if (win.isMinimized()) win.restore();
-  win.show();
+  putUp();
   win.focus();
 };
 
@@ -1531,6 +1571,8 @@ const applyStyle = () => {
 
 const createWindow = () => {
   const { width, height } = clampToScreen(config.get('window.width'), config.get('window.height'));
+  openMaximized = config.get('window.maximized') === true;
+  normalSize = { width, height };
   const family = uiFont();
 
   win = new BrowserWindow({
@@ -1621,6 +1663,8 @@ const createWindow = () => {
       hideWindow();
     }
   });
+
+  win.on('resize', noteNormalSize);
 
   win.on('minimize', event => {
     if (config.get('behaviour.minimize-to-tray')) {

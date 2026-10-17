@@ -63,12 +63,16 @@ const DEFAULTS = {
   'fonts.arabic-size': 100,
   'fonts.arabic-bold': false,
   'fonts.arabic-italic': false,
-  /* Write the window's size back each time it closes, so it opens at that size
-     next time. Off for a tiling window manager, which picks the size itself, or
-     for a config kept in git, where that write is a change on every close: the
-     window then opens at the two keys below as they stand, and nothing in the
-     client writes them -- see keepWindowState in src/main.js. */
+  /* Write the window's size back each time it closes, and whether it was
+     maximised, so it opens the way it was left. Off for a tiling window
+     manager, which picks the size itself, or for a config kept in git, where
+     that write is a change on every close: the window then opens at the three
+     keys below as they stand, and nothing in the client writes them -- see
+     keepWindowState in src/main.js. The size is the window's own even while it
+     is maximised, so un-maximising it goes back to something smaller than the
+     screen. */
   'window.remember-size': true,
+  'window.maximized': false,
   'window.width': 1200,
   'window.height': 800,
   'behaviour.close-to-tray': true,
@@ -221,8 +225,9 @@ class Config {
 
   set(key, value) { this.values[key] = value; }
 
-  /* Only what the client itself decides is written back -- the window size
-     (unless window.remember-size is off) and the zoom level. A hand-written config keeps its comments and its layout,
+  /* Only what the client itself decides is written back -- the window's size
+     and whether it is maximised (unless window.remember-size is off) and the
+     zoom level. A hand-written config keeps its comments and its layout,
      because the file is rewritten from the values it already held plus these. */
   save() {
     const v = this.values;
@@ -275,10 +280,12 @@ class Config {
       `arabic-italic = ${v['fonts.arabic-italic']}`,
       '',
       '[window]',
-      '# Write the size below each time the window closes, and open at it next',
-      '# time. Off: open at width and height as written here and never change',
-      '# them -- for a tiling window manager, or a config kept in git.',
+      '# Write the keys below each time the window closes, and open the way it',
+      '# was left -- maximised, or at that size. Off: open as written here and',
+      '# never change them -- for a tiling window manager, or a config in git.',
       `remember-size = ${v['window.remember-size']}`,
+      '# Open maximised. width and height are still the size it is un-maximised to.',
+      `maximized = ${v['window.maximized']}`,
       `width = ${Math.round(v['window.width'])}`,
       `height = ${Math.round(v['window.height'])}`,
       '',

@@ -236,8 +236,8 @@
           closing.</dd>
 
           <dt>Remember Window Size</dt>
-          <dd>Opens at the size it was closed at. Off for a tiling window manager, which
-          picks the size itself, or a config kept in git.</dd>
+          <dd>Opens the way it was closed: maximised, or at its own size. Off for a tiling
+          window manager, which picks the size itself, or a config kept in git.</dd>
 
           <dt>Desktop Notifications</dt>
           <dd>One banner per message, with the sender's picture and what they said.</dd>
@@ -675,7 +675,8 @@ sudo pacman -U ./whatsapp-desktop-*.pkg.tar.zst  <span class="c"># Arch</span></
 
         <tbody>
           <tr class="grp"><th colspan="3" scope="colgroup">[window] &middot; [links] &middot; [updates] <span>&mdash; the short ones</span></th></tr>
-          <tr><td><code>[window] remember-size</code></td><td><code>true</code></td><td>off, the window opens at the size below and never writes it &mdash; for a tiling WM, or a config in git</td></tr>
+          <tr><td><code>[window] remember-size</code></td><td><code>true</code></td><td>opens the way it was closed, maximised or at its size; off, it opens as below and never writes it &mdash; for a tiling WM, or a config in git</td></tr>
+          <tr><td><code>[window] maximized</code></td><td><code>false</code></td><td>open maximised, remembered on exit</td></tr>
           <tr><td><code>[window] width</code>, <code>height</code></td><td><code>1200×800</code></td><td>remembered on exit, while <code>remember-size</code> is on</td></tr>
           <tr><td><code>[links] claim-scheme</code></td><td><code>true</code></td><td>open <code>whatsapp:</code> links here, not in a browser tab</td></tr>
           <tr><td><code>[updates] check</code></td><td><code>true</code></td><td>the daily look for a newer release; off, only About&#39;s <em>Check</em> asks</td></tr>
