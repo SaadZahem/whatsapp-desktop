@@ -756,6 +756,18 @@ const showWindow = (why, measure = true) => {
 const SHELL_RAISE_MS = 2000;
 const SHELL_RAISE_QUICK_MS = 500;
 const SHELL_RAISE_STEP_MS = 100;
+/* How often an ask that has not been answered is made again, on X11 only.
+ *
+ * An activation made while the shell holds a grab raises the window and leaves
+ * the keyboard where it was: measured on GNOME 50 with the client on Xwayland
+ * and the notification centre left open, the window came up on top and the
+ * focus went back to the other application the moment the menu closed. An ask
+ * made after that is granted at once. Repeating it costs nothing a person can
+ * see -- the window is not taken down, and one already in front stays there --
+ * so it is made again until it lands or the click's time runs out. Not on
+ * Wayland, where an ask the compositor refuses is answered with "WhatsApp is
+ * ready", and asking twice would post it twice. */
+const SHELL_ASK_AGAIN_MS = 500;
 let shellRaiseTimer = null;
 let shellRaiseDone = null;
 let shellRaises = null;
@@ -779,16 +791,21 @@ const showWindowForClick = why => {
   let phase = 'shell';
   let generation = raising.gen;
   let deadline = Date.now() + (shellRaises === false ? SHELL_RAISE_QUICK_MS : SHELL_RAISE_MS);
+  let askedAt = 0;
 
   shellRaiseDone = () => {
     if (phase === 'shell') shellRaises = true;
     debug.trace('raise: notification window has the focus (%s)', phase);
     cancelShellRaise();
   };
-  const raise = nextPhase => {
-    phase = nextPhase;
+  const ask = () => {
     raiseWindow(strategy, why, false);
     generation = raising.gen;
+    askedAt = Date.now();
+  };
+  const raise = nextPhase => {
+    phase = nextPhase;
+    ask();
     deadline = Date.now() + SHELL_RAISE_MS;
   };
   const look = () => {
@@ -806,14 +823,31 @@ const showWindowForClick = why => {
       } else if (phase === 'primary' && automatic) {
         /* The shell has had time to release its grab. Recover once if the
            first method still did not bring the window forward, without
-           changing the strategy used by unrelated tray/shortcut requests. */
-        strategy = strategy === 'remap' ? 'activate' : 'remap';
+           changing the strategy used by unrelated tray/shortcut requests.
+         *
+         * And recover by asking, never by re-mapping. Two seconds without the
+         * focus is a window still waiting on the shell as often as one left
+         * behind, and from here the two look the same. Measured on GNOME 50
+         * with the client on Xwayland, clicked from the notification centre
+         * while it stays open: the activation maps the window on top at once,
+         * the shell keeps the keyboard, and the re-map that followed took the
+         * window down and put it back up -- the "it opened, then opened again"
+         * report -- and still had no focus two seconds later. With nothing
+         * holding a grab the activation was granted in 2-20ms every time. A
+         * window the ask had to map gets the focus the moment the grab is
+         * released; one that was already up is asked again until it does (see
+         * SHELL_ASK_AGAIN_MS). A re-map is only ever a first raise, on Wayland,
+         * where it is the one way up. */
+        strategy = 'activate';
         raise('recovery');
       } else {
         debug.trace('raise: notification window did not gain focus after %s', strategy);
         cancelShellRaise();
         return;
       }
+    } else if (!onWayland && strategy === 'activate' && phase !== 'shell' &&
+               Date.now() - askedAt >= SHELL_ASK_AGAIN_MS) {
+      ask();
     }
     if (shellRaiseDone) shellRaiseTimer = setTimeout(look, SHELL_RAISE_STEP_MS);
   };

@@ -247,11 +247,72 @@ const build = ({ wayland = true, strategy = 'auto' } = {}) => {
   t.showEvent();
   t.click('notification whose ordinary activation is refused');
   t.tick(7000);
-  check('a refused automatic activation tries the other method once',
-        t.calls.filter(call => call === 'hide').length, 1);
+  /* Every 500ms over the primary and recovery windows: 0, 0.5 ... 3.5s. */
+  check('a refused X11 activation is asked for again until the click runs out',
+        t.calls.filter(call => call === 'focus').length, 8);
+  /* The window the shell is still holding the keyboard from is on the screen
+     already: taking it down and putting it back up is the window closing and
+     reopening itself, and it cannot take the focus through the grab either. */
+  check('a refused X11 activation never takes the window down',
+        t.calls.includes('hide'), false);
   const finished = t.calls.slice();
   t.tick(20000);
-  check('rejected activation attempts stop instead of remapping forever', t.calls, finished);
+  check('rejected activation attempts stop instead of asking forever', t.calls, finished);
+}
+
+{
+  const t = build({ wayland: false });
+  t.click('notification centre click while the client is in the tray');
+  t.tick(2500);
+  /* show() on a window already up is part of an ask and maps nothing; only a
+     hide would take it down. */
+  check('a window mapped behind a shell grab stays up on X11', t.state.visible, true);
+  check('and is never taken down while it waits', t.calls.includes('hide'), false);
+  const asked = t.calls.filter(call => call === 'focus').length;
+  t.focus();
+  t.tick(5000);
+  check('focus arriving when the grab is released finishes the click',
+        t.calls.filter(call => call === 'focus').length, asked);
+}
+
+{
+  const t = build({ wayland: false });
+  t.showEvent();
+  t.click('notification centre click, window behind another app, menu held open');
+  t.tick(3100);
+  /* The menu closes and the focus goes back where it was: the next ask is the
+     one that is granted. */
+  const before = t.calls.filter(call => call === 'focus').length;
+  t.tick(500);
+  check('an X11 window left unfocused after the grab is asked again within 500ms',
+        t.calls.filter(call => call === 'focus').length, before + 1);
+  t.focus();
+  t.tick(5000);
+  check('and is left alone once it has the focus',
+        t.calls.filter(call => call === 'focus').length, before + 1);
+  check('and was never taken down', t.calls.includes('hide'), false);
+}
+
+{
+  const t = build();
+  t.click('notification on Wayland while hidden, refused throughout');
+  t.tick(10000);
+  /* A refused ask on Wayland is "WhatsApp is ready" in the shell; asking on a
+     timer would post it again and again. One re-map, one ask, done. */
+  check('Wayland never repeats an unanswered ask',
+        t.calls.filter(call => call === 'focus').length, 2);
+}
+
+{
+  const t = build();
+  t.showEvent();
+  t.click('notification on Wayland, shell never activates');
+  t.tick(2100);
+  check('Wayland still re-maps a window the shell left behind',
+        t.calls.filter(call => call === 'hide').length, 1);
+  t.tick(5000);
+  check('and recovers from a failed re-map by asking, once',
+        t.calls.filter(call => call === 'hide').length, 1);
 }
 
 {
