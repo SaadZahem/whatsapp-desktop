@@ -1030,6 +1030,26 @@ const changeSetting = (key, value) => {
   return { ok: true, restart: false };
 };
 
+/* What the client's own small windows -- Settings, Fonts, About -- have in
+   common: no frame, and on Wayland, rounded corners of their own. A frameless
+   window has no frame for the desktop to round, so it came out square except
+   on a desktop that rounds every window itself. Transparent, it lets the page
+   draw its own shape -- see `:root.rounded` in src/window.css, which the
+   preload switches on when it is handed --rounded-panel.
+
+   Only on Wayland. There a frameless window never had a shadow to lose: the
+   compositor draws none for a client. On X11 it does, for an opaque window
+   only -- measured in a nested GNOME 50 shell, a transparent panel came up
+   rounded and with no shadow at all -- and a desktop that rounds its windows,
+   the owner's among them, rounds this one as it is. So X11 keeps the opaque
+   window it had. Shown once the page has painted either way, so an empty
+   rectangle is never put up first. */
+const panelWindow = () => onWayland
+  ? { frame: false, transparent: true, backgroundColor: '#00000000', show: false }
+  : { frame: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#111b21' : '#f0f2f5',
+      show: false };
+const PANEL_ARGUMENTS = onWayland ? ['--rounded-panel'] : [];
+
 /* Answers with the window, so a caller that wants to look at it -- the debug
    rig, which cannot press Ctrl+, -- has something to look at. */
 const openSettings = () => {
@@ -1039,7 +1059,6 @@ const openSettings = () => {
     return settingsWin;
   }
 
-  const isDark = nativeTheme.shouldUseDarkColors;
   /* An ordinary window, not one as tall as the screen. This used to be sized to
      the panel -- tall enough that every switch fitted without a scroll -- which
      on a laptop meant a column of settings from the top of the work area to the
@@ -1056,13 +1075,13 @@ const openSettings = () => {
        asked -- GNOME centres a new window there of its own accord. */
     center: true,
     resizable: false,
-    frame: false,
+    ...panelWindow(),
     title: 'WhatsApp Settings',
     icon: appIcon,
     autoHideMenuBar: true,
-    backgroundColor: isDark ? '#111b21' : '#f0f2f5',
     webPreferences: {
       preload: path.join(__dirname, 'settings-preload.js'),
+      additionalArguments: PANEL_ARGUMENTS,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -1111,7 +1130,6 @@ const openFonts = () => {
     return fontsWin;
   }
 
-  const isDark = nativeTheme.shouldUseDarkColors;
   const panel = clampToScreen(560, 720);
   const settingsFont = uiFont();
   fontsWin = new BrowserWindow({
@@ -1119,13 +1137,13 @@ const openFonts = () => {
     height: panel.height,
     center: true,
     resizable: false,
-    frame: false,
+    ...panelWindow(),
     title: 'WhatsApp Fonts',
     icon: appIcon,
     autoHideMenuBar: true,
-    backgroundColor: isDark ? '#111b21' : '#f0f2f5',
     webPreferences: {
       preload: path.join(__dirname, 'settings-preload.js'),
+      additionalArguments: PANEL_ARGUMENTS,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -1234,7 +1252,6 @@ const openAbout = ({ checkNow = false } = {}) => {
   }
 
   aboutShouldCheck = checkNow;
-  const isDark = nativeTheme.shouldUseDarkColors;
   const panel = clampToScreen(430, 610);
   const aboutFont = uiFont();
   aboutWin = new BrowserWindow({
@@ -1242,13 +1259,13 @@ const openAbout = ({ checkNow = false } = {}) => {
     height: panel.height,
     center: true,
     resizable: false,
-    frame: false,
+    ...panelWindow(),
     title: 'About WhatsApp',
     icon: appIcon,
     autoHideMenuBar: true,
-    backgroundColor: isDark ? '#111b21' : '#f0f2f5',
     webPreferences: {
       preload: path.join(__dirname, 'about-preload.js'),
+      additionalArguments: PANEL_ARGUMENTS,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,

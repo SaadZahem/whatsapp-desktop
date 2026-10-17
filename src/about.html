@@ -86,6 +86,17 @@
       transition: background-color 0.25s ease, color 0.25s ease;
     }
 
+    /* Rounded like Settings and Fonts -- see `:root.rounded` in window.css,
+       which this page does not link, for why the root's background is an
+       image of nothing. */
+    :root.rounded { background: linear-gradient(transparent, transparent); }
+    :root.rounded body {
+      border-radius: 24px;
+      clip-path: inset(0 round 24px);
+      outline: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+      outline-offset: -1px;
+    }
+
     .header {
       -webkit-app-region: drag;
       display: flex;

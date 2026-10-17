@@ -98,6 +98,26 @@ body {
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
+/* The window's own shape. On Wayland, Settings, Fonts and About are
+   transparent windows with no frame (panelWindow in src/main.js, and the
+   preload sets the class), so the corners are drawn here:
+   24px, what the owner's desktop rounds every window to, and a hairline edge
+   the way a libadwaita window has one, so a panel over something the same
+   colour still has a border. Only on those panels -- the connection page
+   shares this sheet and is drawn in the main window, which keeps its frame.
+
+   The root's background is an image of nothing rather than `transparent`: a
+   root with no background at all hands the body's to the whole canvas, which
+   paints the window's full rectangle and leaves the corners square under
+   the rounded body. Measured, not guessed: the bottom corners stayed dark. */
+:root.rounded { background: linear-gradient(transparent, transparent); }
+:root.rounded body {
+  border-radius: 24px;
+  clip-path: inset(0 round 24px);
+  outline: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  outline-offset: -1px;
+}
+
 /* Custom Header / Drag Bar */
 .header {
   -webkit-app-region: drag;

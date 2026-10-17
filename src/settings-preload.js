@@ -5,6 +5,18 @@
    whichever of them asked, so neither needs a channel of its own. */
 const { contextBridge, ipcRenderer } = require('electron');
 
+/* The window is transparent and the page draws its corners -- only when the
+   client says so, because it is only transparent on Wayland (see panelWindow
+   in main.js). Marked as the <html> element arrives, before anything paints,
+   so the window is never seen square first. */
+if (process.argv.includes('--rounded-panel')) {
+  const round = () => document.documentElement.classList.add('rounded');
+  if (document.documentElement) round();
+  else new MutationObserver((_, watch) => {
+    if (document.documentElement) { round(); watch.disconnect(); }
+  }).observe(document, { childList: true });
+}
+
 contextBridge.exposeInMainWorld('api', {
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setTheme: theme => ipcRenderer.invoke('settings:set-theme', theme),
