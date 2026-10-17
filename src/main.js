@@ -953,7 +953,18 @@ const hideWindow = () => {
      later. */
   raising.gen++;
   cancelShellRaise();
+  /* A maximised window put away on X11 is mapped again at the size it had
+     when it went: the whole screen. Mutter takes that as the size it
+     un-maximises to, so un-maximising a window that had been to the tray once
+     went to a window covering the screen, and that size was then kept as its
+     own. Measured in a nested GNOME 50 on Xwayland, and only there: Wayland
+     un-maximises to the right size. Given its own size while it is down, it
+     still comes back maximised in a single map (probed on window_manager
+     "map"), and un-maximises to that size. Not unmaximize() to get there --
+     a restore shows the window, so it came straight back out of the tray. */
+  const maximized = !onWayland && win.isMaximized();
   win.hide();
+  if (maximized && normalSize) win.setSize(normalSize.width, normalSize.height);
 };
 
 /* The tray's one item, and the whole of what it does -- for the hosts that

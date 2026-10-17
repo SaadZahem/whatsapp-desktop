@@ -61,6 +61,7 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
       state.visible = true;
       win.emit('show');
     },
+    setSize(width, height) { calls.push(`setSize ${width}x${height}`); },
     restore() {
       calls.push('restore');
       state.minimized = false;
@@ -97,7 +98,7 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
   });
   vm.runInContext(controller + '\ntraceWindowState();\n' +
     'globalThis.controls = { show: showWindow, click: showWindowForClick, hide: hideWindow,\n' +
-    '  leftMaximized: () => { openMaximized = true; }, keepSoon };',
+    '  leftMaximized: () => { openMaximized = true; }, keepSoon, note: noteNormalSize };',
   context, { filename: 'main.js (window controller)' });
 
   const tick = duration => {
@@ -436,6 +437,22 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
         t.saves(), 0);
   t.tick(600);
   check('and is written once it has settled', [t.saves(), t.values['window.width']], [1, 958]);
+}
+
+/* Put away maximised on X11, a window comes back at the size of the screen and
+   un-maximises to that -- so it is given its own size while it is down. Not on
+   Wayland, which un-maximises to the right size, and not a window that was
+   not maximised. */
+for (const [wayland, maximized, want] of [[false, true, ['hide', 'setSize 958x1047']],
+                                          [true, true, ['hide']], [false, false, ['hide']]]) {
+  const t = build({ wayland });
+  t.showEvent();
+  t.note();
+  t.state.maximized = maximized;
+  t.calls.length = 0;
+  t.hide();
+  check(`${wayland ? 'Wayland' : 'X11'}: a ${maximized ? 'maximised' : 'plain'} window put away ` +
+        (want.length > 1 ? 'is given its own size' : 'is left as it is'), t.calls, want);
 }
 
 /* Opened the way it was left: the first show of a window left maximised is a
