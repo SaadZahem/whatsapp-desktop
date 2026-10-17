@@ -28,6 +28,7 @@ const read = name => fs.readFileSync(path.join(__dirname, '..', 'src', name), 'u
    because there is one handler behind them. */
 const settings = () => ({
   theme: 'dark', autostart: true, closeToTray: true, minimizeToTray: false,
+  rememberSize: true,
   notifyEnabled: true, notifySound: true, outgoingSound: false,
   zoom: 1.0, fontSize: 16, font: 'PoetsenOne',
   chatCards: false,
@@ -183,6 +184,7 @@ const open = async (file, answer) => {
     const switches = [
       ['closeToTrayToggle', 'behaviour.close-to-tray'],
       ['minimizeToTrayToggle', 'behaviour.minimize-to-tray'],
+      ['rememberSizeToggle', 'window.remember-size'],
       ['notifyToggle', 'notifications.enabled'],
       ['notifySoundToggle', 'notifications.sound'],
       ['outgoingSoundToggle', 'notifications.outgoing-sound'],

@@ -42,6 +42,7 @@ ipcMain.handle('settings:get', () => ({
   autostart: true,
   closeToTray: true,
   minimizeToTray: false,
+  rememberSize: true,
   notifyEnabled: true,
   notifySound: true,
   outgoingSound: false,

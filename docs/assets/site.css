@@ -490,8 +490,9 @@ td:first-child { color: var(--fg); white-space: nowrap; }
    nobody reads twice. The file has eight sections, so the table has eight
    groups: the section name is a heading row and the keys under it are written
    the way they appear under it in the file. `[window]`, `[links]` and
-   `[updates]` are one key each, so they share the last group and keep their
-   prefixes -- a heading of its own for a single row is worse than the noise. */
+   `[updates]` are a row or two each, so they share the last group and keep
+   their prefixes -- a heading of its own for a single row is worse than the
+   noise. */
 .conf-table .grp th {
   padding: 20px 12px 7px;
   color: var(--accent); font-size: .8rem; letter-spacing: .04em;

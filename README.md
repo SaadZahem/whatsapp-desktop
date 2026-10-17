@@ -260,7 +260,8 @@ startup and carries on without it.
 | `[fonts] arabic-family` | whatever the system draws Arabic in | family for Arabic, even in the middle of an English line |
 | `[fonts] arabic-size` | `100` | Arabic on its own, beside the Latin in the same line |
 | `[fonts] arabic-bold`, `arabic-italic` | `false` | as above |
-| `[window] width`, `height` | `1200x800` | remembered on exit |
+| `[window] remember-size` | `true` | write the window's size back each time it closes. Off for a tiling window manager, or a config kept in git: the window opens at `width` and `height` as written and nothing changes them |
+| `[window] width`, `height` | `1200x800` | remembered on exit, while `remember-size` is on |
 | `[behaviour] close-to-tray` | `true` | closing the window leaves the client running |
 | `[behaviour] minimize-to-tray` | `false` | minimise is not close |
 | `[behaviour] spellcheck` | `true` | Chromium's own, in the box you type in |

@@ -346,6 +346,23 @@ const clampToScreen = (width, height) => {
   };
 };
 
+/* What closing the window writes back. The size is as much the window
+   manager's answer as the owner's -- a tiling one picks it -- and writing that
+   down on every close makes a config file that changes each time it is used,
+   which is noise in one kept under version control. With remember-size off the
+   window opens at the width and height the file holds, and they are never
+   written. The zoom is kept either way: only the owner ever changes it. */
+const keepWindowState = () => {
+  if (!win || win.isDestroyed()) return;
+  if (config.get('window.remember-size') !== false) {
+    const bounds = win.getBounds();
+    config.set('window.width', bounds.width);
+    config.set('window.height', bounds.height);
+  }
+  config.set('view.zoom', win.webContents.getZoomFactor());
+  config.save();
+};
+
 /* Raising a window on Wayland is done by taking it down and putting it back up
    (see showWindow), and for the frame in between the window is genuinely not on
    screen. The page must not hear about that frame. Told the client went away and
@@ -1578,13 +1595,7 @@ const createWindow = () => {
   /* ------------------------------------------------------ closing and hiding */
 
   win.on('close', event => {
-    if (win && !win.isDestroyed()) {
-      const bounds = win.getBounds();
-      config.set('window.width', bounds.width);
-      config.set('window.height', bounds.height);
-      config.set('view.zoom', win.webContents.getZoomFactor());
-      config.save();
-    }
+    keepWindowState();
     /* Closing the window is not quitting: the client stays connected in the tray
        and messages keep arriving. Ctrl+Q, and the tray's own Quit, are the two
        ways out. */
@@ -2736,6 +2747,7 @@ const wireIpc = () => {
       autostart: autostart.isEnabled(),
       closeToTray: !!config.get('behaviour.close-to-tray'),
       minimizeToTray: !!config.get('behaviour.minimize-to-tray'),
+      rememberSize: config.get('window.remember-size') !== false,
       notifyEnabled: !!config.get('notifications.enabled'),
       notifySound: !!config.get('notifications.sound'),
       outgoingSound: !!config.get('notifications.outgoing-sound'),

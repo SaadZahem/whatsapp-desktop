@@ -348,5 +348,32 @@ const build = ({ wayland = true, strategy = 'auto' } = {}) => {
         calls, ['wa:focus-request']);
 }
 
+/* What a close writes back. A tiling window manager picks the size, and a
+   config kept in git sees that write as a change on every close -- so with
+   remember-size off the size must not be touched, and the zoom still must. */
+{
+  const close = remember => {
+    const values = { 'window.remember-size': remember, 'window.width': 1200, 'window.height': 800 };
+    let saves = 0;
+    const context = vm.createContext({
+      config: { get: key => values[key], set: (key, value) => { values[key] = value; }, save: () => saves++ },
+      win: {
+        isDestroyed: () => false,
+        getBounds: () => ({ x: 0, y: 0, width: 958, height: 1047 }),
+        webContents: { getZoomFactor: () => 1.1 },
+      },
+      electronScreen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1920, height: 1080 } }) },
+    });
+    vm.runInContext(controller + '\nglobalThis.keep = keepWindowState;', context,
+                    { filename: 'main.js (window controller)' });
+    context.keep();
+    return { size: [values['window.width'], values['window.height']], zoom: values['view.zoom'], saves };
+  };
+  check('a close writes the size the window manager gave it, by default',
+        close(true), { size: [958, 1047], zoom: 1.1, saves: 1 });
+  check('with remember-size off, the size in the file is left as it was',
+        close(false), { size: [1200, 800], zoom: 1.1, saves: 1 });
+}
+
 console.log(failures ? `\n${failures} window check(s) failed` : '\nwindow checks pass');
 process.exitCode = failures ? 1 : 0;

@@ -127,6 +127,17 @@
             <span class="slider"></span>
           </label>
         </div>
+
+        <div class="row">
+          <div class="row-info">
+            <div class="row-title">Remember Window Size</div>
+            <div class="row-desc">Open at the size it was closed at. Off for a tiling window manager, or a config kept in git</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="rememberSizeToggle" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
       </div>
     </div>
 
@@ -360,6 +371,7 @@
     const autostartToggle = document.getElementById('autostartToggle');
     const closeToTrayToggle = document.getElementById('closeToTrayToggle');
     const minimizeToTrayToggle = document.getElementById('minimizeToTrayToggle');
+    const rememberSizeToggle = document.getElementById('rememberSizeToggle');
     const notifyToggle = document.getElementById('notifyToggle');
     const notifySoundToggle = document.getElementById('notifySoundToggle');
     const outgoingSoundToggle = document.getElementById('outgoingSoundToggle');
@@ -434,6 +446,7 @@
         autostartToggle.checked = !!data.autostart;
         closeToTrayToggle.checked = !!data.closeToTray;
         minimizeToTrayToggle.checked = !!data.minimizeToTray;
+        rememberSizeToggle.checked = data.rememberSize !== false;
         notifyToggle.checked = !!data.notifyEnabled;
         notifySoundToggle.checked = !!data.notifySound;
         outgoingSoundToggle.checked = !!data.outgoingSound;
@@ -479,6 +492,10 @@
 
     minimizeToTrayToggle.addEventListener('change', async () => {
       if (window.api) await window.api.setSetting('behaviour.minimize-to-tray', minimizeToTrayToggle.checked);
+    });
+
+    rememberSizeToggle.addEventListener('change', async () => {
+      if (window.api) await window.api.setSetting('window.remember-size', rememberSizeToggle.checked);
     });
 
     notifyToggle.addEventListener('change', async () => {
