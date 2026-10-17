@@ -260,9 +260,9 @@ startup and carries on without it.
 | `[fonts] arabic-family` | whatever the system draws Arabic in | family for Arabic, even in the middle of an English line |
 | `[fonts] arabic-size` | `100` | Arabic on its own, beside the Latin in the same line |
 | `[fonts] arabic-bold`, `arabic-italic` | `false` | as above |
-| `[window] remember-size` | `true` | write the window's size and whether it was maximised back each time it closes, so it opens the way it was left. Off for a tiling window manager, or a config kept in git: the window opens as the keys below say and nothing changes them |
-| `[window] maximized` | `false` | open maximised; remembered on exit while `remember-size` is on |
-| `[window] width`, `height` | `1200x800` | remembered on exit while `remember-size` is on -- the size it un-maximises to, even when it was closed maximised |
+| `[window] remember-size` | `true` | write the window's size and whether it is maximised back as they change, so it opens the way it was left -- after a shutdown too, which never closes it. Off for a tiling window manager, or a config kept in git: the window opens as the keys below say and nothing changes them |
+| `[window] maximized` | `false` | open maximised; remembered as it changes while `remember-size` is on |
+| `[window] width`, `height` | `1200x800` | remembered as it changes while `remember-size` is on -- the size it un-maximises to, even when it was left maximised |
 | `[behaviour] close-to-tray` | `true` | closing the window leaves the client running |
 | `[behaviour] minimize-to-tray` | `false` | minimise is not close |
 | `[behaviour] spellcheck` | `true` | Chromium's own, in the box you type in |

@@ -29,18 +29,22 @@ const check = (label, got, want) => {
               '\n         want ' + JSON.stringify(want));
 };
 
-const build = ({ wayland = true, strategy = 'auto' } = {}) => {
+const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
   let now = 10000;
+  let saves = 0;
   let nextTimer = 0;
   const timers = new Map();
   const calls = [];
-  const state = { visible: false, minimized: false, focused: false, destroyed: false };
+  const state = { visible: false, minimized: false, focused: false, destroyed: false, maximized: false };
   const win = new EventEmitter();
   Object.assign(win, {
     isVisible: () => state.visible,
     isMinimized: () => state.minimized,
     isFocused: () => state.focused,
     isDestroyed: () => state.destroyed,
+    isMaximized: () => state.maximized,
+    isFullScreen: () => false,
+    getBounds: () => ({ x: 0, y: 0, width: 958, height: 1047 }),
     hide() {
       calls.push('hide');
       state.visible = false;
@@ -64,12 +68,16 @@ const build = ({ wayland = true, strategy = 'auto' } = {}) => {
     },
     /* A request is not a grant. Only the test's focus event grants it. */
     focus() { calls.push('focus'); },
-    webContents: { send() {} },
+    webContents: { send() {}, getZoomFactor: () => 1 },
   });
   const context = vm.createContext({
     win,
     onWayland: wayland,
-    config: { get: key => key === 'behaviour.raise' ? strategy : undefined },
+    config: {
+      get: key => key === 'behaviour.raise' ? strategy : values[key],
+      set: (key, value) => { values[key] = value; },
+      save: () => saves++,
+    },
     tray: null,
     lock: { recordActivity() {} },
     shield: { setWindowFocus() {} },
@@ -89,7 +97,7 @@ const build = ({ wayland = true, strategy = 'auto' } = {}) => {
   });
   vm.runInContext(controller + '\ntraceWindowState();\n' +
     'globalThis.controls = { show: showWindow, click: showWindowForClick, hide: hideWindow,\n' +
-    '  leftMaximized: () => { openMaximized = true; } };',
+    '  leftMaximized: () => { openMaximized = true; }, keepSoon };',
   context, { filename: 'main.js (window controller)' });
 
   const tick = duration => {
@@ -110,7 +118,8 @@ const build = ({ wayland = true, strategy = 'auto' } = {}) => {
   const focus = () => { state.focused = true; win.emit('focus'); };
   const blur = () => { state.focused = false; win.emit('blur'); };
   const minimize = () => { state.minimized = true; state.focused = false; win.emit('minimize'); };
-  return { ...context.controls, state, calls, tick, showEvent: show, focus, blur, minimize };
+  return { ...context.controls, state, calls, tick, showEvent: show, focus, blur, minimize,
+           values, saves: () => saves };
 };
 
 {
@@ -356,16 +365,21 @@ const build = ({ wayland = true, strategy = 'auto' } = {}) => {
 
 /* What a close writes back. A tiling window manager picks the size, and a
    config kept in git sees that write as a change on every close -- so with
-   remember-size off the size must not be touched, and the zoom still must. */
+   remember-size off the size must not be touched, and the zoom still must.
+   And only a change is written: the window's state is kept as it changes now,
+   so most of these calls find the file already right. */
 {
-  const close = (remember, maximized = false, noted = true) => {
-    const values = { 'window.remember-size': remember, 'window.maximized': false,
-                     'window.width': 1200, 'window.height': 800 };
+  const close = ({ remember = true, maximized = false, noted = true, visible = true,
+                   was = {} } = {}) => {
+    const values = Object.assign({ 'window.remember-size': remember, 'window.maximized': false,
+                                   'window.width': 1200, 'window.height': 800, 'view.zoom': 1 }, was);
     let saves = 0;
     const context = vm.createContext({
       config: { get: key => values[key], set: (key, value) => { values[key] = value; }, save: () => saves++ },
+      debug: { trace() {} },
       win: {
         isDestroyed: () => false,
+        isVisible: () => visible,
         isMaximized: () => maximized,
         isMinimized: () => false,
         isFullScreen: () => false,
@@ -373,7 +387,8 @@ const build = ({ wayland = true, strategy = 'auto' } = {}) => {
                                    : { x: 0, y: 0, width: 958, height: 1047 },
         /* What X11 answers: the maximised size, not the one it goes back to. */
         getNormalBounds: () => ({ x: 0, y: 0, width: 2560, height: 1373 }),
-        webContents: { getZoomFactor: () => 1.1 },
+        /* What Chromium answers after two Ctrl+= from 0.9. */
+        webContents: { getZoomFactor: () => 1.1000000000000003 },
       },
       electronScreen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1920, height: 1080 } }) },
     });
@@ -392,13 +407,35 @@ const build = ({ wayland = true, strategy = 'auto' } = {}) => {
              maximized: values['window.maximized'], zoom: values['view.zoom'], saves };
   };
   check('a close writes the size the window manager gave it, by default',
-        close(true), { size: [958, 1047], maximized: false, zoom: 1.1, saves: 1 });
+        close(), { size: [958, 1047], maximized: false, zoom: 1.1, saves: 1 });
   check('a maximised window is written down as maximised, with the size it un-maximises to',
-        close(true, true), { size: [958, 1047], maximized: true, zoom: 1.1, saves: 1 });
+        close({ maximized: true }), { size: [958, 1047], maximized: true, zoom: 1.1, saves: 1 });
   check('with remember-size off, the size in the file is left as it was',
-        close(false), { size: [1200, 800], maximized: false, zoom: 1.1, saves: 1 });
+        close({ remember: false }), { size: [1200, 800], maximized: false, zoom: 1.1, saves: 1 });
   check('and so is whether it was maximised',
-        close(false, true), { size: [1200, 800], maximized: false, zoom: 1.1, saves: 1 });
+        close({ remember: false, maximized: true }), { size: [1200, 800], maximized: false, zoom: 1.1, saves: 1 });
+  /* A client the session started into the tray was never shown, so it is not
+     maximised -- and that is not the window as it was left. */
+  check('a window in the tray keeps the state it had when it was last up',
+        close({ visible: false, was: { 'window.maximized': true, 'window.width': 958, 'window.height': 1047 } }),
+        { size: [958, 1047], maximized: true, zoom: 1.1, saves: 1 });
+  check('a window already written down as it is writes nothing',
+        close({ maximized: true, was: { 'window.maximized': true, 'window.width': 958,
+                                        'window.height': 1047, 'view.zoom': 1.1 } }),
+        { size: [958, 1047], maximized: true, zoom: 1.1, saves: 0 });
+}
+
+/* Kept as it changes, not only on close: the session going down stops the
+   client with a SIGTERM, and `close` never runs. A drag is a stream of
+   resizes, and the state is written once, after it settles. */
+{
+  const t = build({ values: { 'window.width': 1200, 'window.height': 800, 'view.zoom': 1 } });
+  t.showEvent();
+  for (let i = 0; i < 20; i++) { t.keepSoon(); t.tick(20); }
+  check('a stream of changes is not written while it is still coming',
+        t.saves(), 0);
+  t.tick(600);
+  check('and is written once it has settled', [t.saves(), t.values['window.width']], [1, 958]);
 }
 
 /* Opened the way it was left: the first show of a window left maximised is a

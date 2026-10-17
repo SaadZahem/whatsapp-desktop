@@ -91,6 +91,27 @@ check('a number that is not a number falls back rather than poisoning the page',
 check('yes is true, the way an INI file means it', typed.get('view.force-font'), true);
 check('and a number that is one is a number', typed.get('lock.timeout'), 5);
 
+/* Saved by renaming a whole new file over the old one, now that it is written
+   while the client runs. A config kept in a dotfiles repo is a symlink, and
+   the rename goes to the file it points at, not over the link. */
+{
+  const kept = path.join(sandbox, 'dotfiles.conf');
+  fs.renameSync(CONFIG_PATH, kept);
+  fs.chmodSync(kept, 0o600);
+  fs.symlinkSync(kept, CONFIG_PATH);
+  const linked = new Config();
+  linked.set('window.width', 777);
+  linked.save();
+  check('a symlinked config is still a symlink after a save',
+        fs.lstatSync(CONFIG_PATH).isSymbolicLink(), true);
+  check('and the file it points at has the save, and its own mode',
+        [new Config().get('window.width'), fs.statSync(kept).mode & 0o777], [777, 0o600]);
+  check('and nothing is left beside it',
+        fs.readdirSync(sandbox).filter(name => name.endsWith('.tmp')), []);
+  fs.rmSync(CONFIG_PATH);
+  fs.renameSync(kept, CONFIG_PATH);
+}
+
 /* The stylesheet lives beside the config file, not somewhere else. */
 check('custom.css is in the config directory',
       path.dirname(CUSTOM_CSS_PATH), path.dirname(CONFIG_PATH));

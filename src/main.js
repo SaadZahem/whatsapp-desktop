@@ -379,28 +379,56 @@ const putUp = () => {
   win.show();
 };
 
-/* What closing the window writes back. The size is as much the window
+/* What the window writes back about itself. The size is as much the window
    manager's answer as the owner's -- a tiling one picks it -- and writing that
    down on every close makes a config file that changes each time it is used,
    which is noise in one kept under version control. With remember-size off the
    window opens the way the file says, and nothing here is written. The zoom is
-   kept either way: only the owner ever changes it.
+   kept either way: only the owner ever changes it. And only a change reaches
+   the disk, so a window that ends where it started rewrites nothing.
 
    A maximised window is written down as maximised, with the size it had before
    -- not as a window the size of the screen. That is what used to happen: the
    owner's config read 2560x1373, so the client came back covering the screen
-   without being maximised, and un-maximising it had nowhere smaller to go. */
+   without being maximised, and un-maximising it had nowhere smaller to go.
+
+   A window that is not up has no state to write: the one it had when it was
+   last up stands. That is the tray, and the case that matters is a client
+   the session started into the tray and nobody has opened yet -- not
+   maximised only because it was never shown, so quitting it before opening it
+   used to write maximized = false over a window left maximised. */
 const keepWindowState = () => {
   if (!win || win.isDestroyed()) return;
-  if (config.get('window.remember-size') !== false) {
+  const state = { 'view.zoom': Math.round(win.webContents.getZoomFactor() * 100) / 100 };
+  const up = win.isVisible() && !win.isMinimized() && !win.isFullScreen();
+  if (config.get('window.remember-size') !== false && up) {
     const maximized = win.isMaximized();
     const bounds = maximized ? normalSize || win.getNormalBounds() : win.getBounds();
-    config.set('window.maximized', maximized);
-    config.set('window.width', bounds.width);
-    config.set('window.height', bounds.height);
+    state['window.maximized'] = maximized;
+    state['window.width'] = bounds.width;
+    state['window.height'] = bounds.height;
   }
-  config.set('view.zoom', win.webContents.getZoomFactor());
+  const changed = Object.keys(state).filter(key => config.get(key) !== state[key]);
+  if (!changed.length) return;
+  for (const key of changed) config.set(key, state[key]);
   config.save();
+  debug.trace('window: kept %s', changed.map(key => `${key} = ${state[key]}`).join(', '));
+};
+
+/* And written as it changes, not only when the window closes -- because it
+   mostly never does. The client starts with the session and is still up, in
+   the tray or on screen, when the machine goes down, and then nothing closes
+   it: the session stops every process it has with one SIGTERM, all at once.
+   Measured, stopping the client's scope the way logout does: the process was
+   gone 34ms later, `close` never ran, and the config still said what it said
+   when the client started. So a maximise, an un-maximise, a resize and a zoom
+   are each written down once they have settled -- a drag is a hundred resizes
+   -- and the file is always the window as it last was, however it ends. */
+const KEEP_SETTLE_MS = 500;
+let keepTimer = null;
+const keepSoon = () => {
+  clearTimeout(keepTimer);
+  keepTimer = setTimeout(() => { keepTimer = null; keepWindowState(); }, KEEP_SETTLE_MS);
 };
 
 /* Raising a window on Wayland is done by taking it down and putting it back up
@@ -1664,7 +1692,8 @@ const createWindow = () => {
     }
   });
 
-  win.on('resize', noteNormalSize);
+  win.on('resize', () => { noteNormalSize(); keepSoon(); });
+  for (const event of ['maximize', 'unmaximize']) win.on(event, keepSoon);
 
   win.on('minimize', event => {
     if (config.get('behaviour.minimize-to-tray')) {
@@ -2070,12 +2099,15 @@ const onKey = (event, input) => {
   if (ctrl && (key === '+' || key === '=')) {
     event.preventDefault();
     win.webContents.setZoomFactor(Math.min(3, zoom + 0.1));
+    keepSoon();
   } else if (ctrl && key === '-') {
     event.preventDefault();
     win.webContents.setZoomFactor(Math.max(0.3, zoom - 0.1));
+    keepSoon();
   } else if (ctrl && key === '0') {
     event.preventDefault();
     win.webContents.setZoomFactor(1);
+    keepSoon();
   }
 };
 

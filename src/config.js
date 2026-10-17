@@ -280,9 +280,10 @@ class Config {
       `arabic-italic = ${v['fonts.arabic-italic']}`,
       '',
       '[window]',
-      '# Write the keys below each time the window closes, and open the way it',
-      '# was left -- maximised, or at that size. Off: open as written here and',
-      '# never change them -- for a tiling window manager, or a config in git.',
+      '# Write the keys below as the window changes, and open the way it was',
+      '# left -- maximised, or at that size -- however the client ended, a',
+      '# shutdown included. Off: open as written here and never change them --',
+      '# for a tiling window manager, or a config in git.',
       `remember-size = ${v['window.remember-size']}`,
       '# Open maximised. width and height are still the size it is un-maximised to.',
       `maximized = ${v['window.maximized']}`,
@@ -405,11 +406,33 @@ class Config {
       '',
     ].join('\n');
 
+    /* Written beside itself and renamed over, so the file is always either the
+       old one or the new one. It is written while the client runs now -- the
+       window's state as it changes -- and a session going down stops the
+       client wherever it is; a truncate-and-write cut short there is a config
+       with every setting gone. Through a symlink to the real file, so a config
+       kept in a dotfiles repo stays linked, and with that file's own mode. */
+    let temp = '';
     try {
       fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
-      fs.writeFileSync(CONFIG_PATH, text);
+      let target = CONFIG_PATH;
+      let mode = 0o644;
+      try {
+        target = fs.realpathSync(CONFIG_PATH);
+        mode = fs.statSync(target).mode & 0o7777;
+      } catch (e) { /* not there yet */ }
+      temp = `${target}.${process.pid}.tmp`;
+      const fd = fs.openSync(temp, 'w', mode);
+      try {
+        fs.writeSync(fd, text);
+        fs.fsyncSync(fd);
+      } finally {
+        fs.closeSync(fd);
+      }
+      fs.renameSync(temp, target);
     } catch (e) {
       console.warn('could not write %s: %s', CONFIG_PATH, e.message);
+      if (temp) fs.rmSync(temp, { force: true });
     }
   }
 }
