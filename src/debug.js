@@ -202,11 +202,17 @@ const install = (getWindow, getBanners, actions = {}) => {
        whether it closes the emoji panel is a question only a trusted key can
        answer. */
     if (source === '#esc' || source.startsWith('#key ')) {
-      const key = source === '#esc' ? 'Escape' : source.slice(5).trim();
-      win.webContents.sendInputEvent({ type: 'keyDown', keyCode: key });
-      win.webContents.sendInputEvent({ type: 'char', keyCode: key });
-      win.webContents.sendInputEvent({ type: 'keyUp', keyCode: key });
-      console.log('debug: sent %s as a real key', key);
+      /* "#key Ctrl+F" holds the modifiers down for the key, the way a chord
+         is typed: a shortcut is a question about a chord, not a letter. */
+      const chord = (source === '#esc' ? 'Escape' : source.slice(5).trim()).split('+');
+      const key = chord.pop();
+      const MODIFIERS = { ctrl: 'control', control: 'control', shift: 'shift', alt: 'alt', meta: 'meta' };
+      const modifiers = chord.map(name => MODIFIERS[name.toLowerCase()]).filter(Boolean);
+      win.webContents.sendInputEvent({ type: 'keyDown', keyCode: key, modifiers });
+      if (!modifiers.some(name => name !== 'shift'))
+        win.webContents.sendInputEvent({ type: 'char', keyCode: key, modifiers });
+      win.webContents.sendInputEvent({ type: 'keyUp', keyCode: key, modifiers });
+      console.log('debug: sent %s as a real key', source === '#esc' ? key : source.slice(5).trim());
       return;
     }
 
