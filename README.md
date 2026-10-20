@@ -338,6 +338,22 @@ If a banner reaches the notification centre but never floats, check that a plain
 GNOME suppresses banners while a window is fullscreen, while presence is BUSY,
 and while `show-banners` is off.
 
+## Chat links, when they open in a browser tab
+
+A "Chat on WhatsApp" link — `wa.me`, `api.whatsapp.com` — lands on WhatsApp's
+own page, and that page asks the browser to open `whatsapp://send?phone=…`
+once, as it loads. This client holds that scheme, so the chat opens here — if
+the browser lets it through. Firefox and Zen ask first, every time, with a box
+over the page: *Allow this site to open the whatsapp link with WhatsApp?*
+Cancel it and the page's own *Open app* button is no way back: it points at
+web.whatsapp.com, and the chat opens in a browser tab. Tick *Always allow
+https://api.whatsapp.com to open whatsapp links* and press *Open Link* once;
+every link after that comes straight here. Chromium-based browsers ask the same
+question with an always-allow box of their own.
+
+A site that links to web.whatsapp.com itself never offers the scheme at all,
+and nothing outside the browser can catch that one.
+
 ## Diagnosing it
 
 ```sh
