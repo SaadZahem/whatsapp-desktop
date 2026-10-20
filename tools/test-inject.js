@@ -375,6 +375,7 @@ const sandbox = {
     /* The warm-up too: with no Bootloader in this registry it never begins,
        which is the same day-WhatsApp-renames-it shape. */
     if (name === './warmup.js') return require('../src/page/warmup.js');
+    if (name === './find.js') return require('../src/page/find.js');
     /* Anything else is a name out of WhatsApp's own registry, which the page
        reaches for through this same require -- contextIsolation is off, so
        window.require IS Meta's. The rig answers for a name only once a check has
