@@ -34,10 +34,12 @@ const INVITE_SETTLE_MS = Number(
 /* ------------------------------------------------------------ the mock DOM */
 
 /* Only the selector forms inject.js actually uses: a tag, an #id, [attr],
-   [attr="value"], [attr^="value"], and comma-separated lists of those. */
-const parseSel = sel => sel.split(',').map(part => {
-  const whole = /^([a-zA-Z]*)((?:#[\w-]+|\[[^\]]+\])*)$/.exec(part.trim());
-  if (!whole) throw new Error('unsupported selector: ' + part);
+   [attr="value"], [attr^="value"], *, a descendant of one of those, and
+   comma-separated lists of them. */
+const parseStep = step => {
+  if (step === '*') return () => true;
+  const whole = /^([a-zA-Z]*)((?:#[\w-]+|\[[^\]]+\])*)$/.exec(step);
+  if (!whole) throw new Error('unsupported selector: ' + step);
   const tests = [];
   if (whole[1]) tests.push(el => el.tagName.toLowerCase() === whole[1].toLowerCase());
   for (const cond of whole[2].match(/#[\w-]+|\[[^\]]+\]/g) || []) {
@@ -54,6 +56,21 @@ const parseSel = sel => sel.split(',').map(part => {
     else tests.push(el => String(el.attrs[name] || '').startsWith(want));
   }
   return el => tests.every(test => test(el));
+};
+const parseSel = sel => sel.split(',').map(part => {
+  /* Split on the spaces between steps, not the ones inside a quoted value. */
+  const steps = (part.trim().match(/(?:[^\s[]|\[[^\]]*\])+/g) || ['']).map(parseStep);
+  const last = steps.pop();
+  return el => {
+    if (!last(el)) return false;
+    let node = el.parentNode;
+    for (let i = steps.length - 1; i >= 0; i--) {
+      while (node && !steps[i](node)) node = node.parentNode;
+      if (!node) return false;
+      node = node.parentNode;
+    }
+    return true;
+  };
 });
 
 class El {
@@ -1167,6 +1184,29 @@ const check = (label, got, want) => {
   push('open-invite', { code: '' });
   await sleep(600);
   check('a link with no code in it asks for nothing', asked.length, 2);
+
+  /* Escape with in-chat search's date picker up, issue #10. WhatsApp closes the
+     picker, but the page does not move inside the watch, and the watch used to
+     read that as an Escape that closed nothing and close the conversation. */
+  let closedChats = 0;
+  waModules.WAWebCmd = { Cmd: { closeActiveChat: () => { closedChats++; closeConversation(); } } };
+  sandbox.document.elementFromPoint = () => pane;
+  const escape = () => fire('keydown', { key: 'Escape', preventDefault() {}, stopPropagation() {} });
+  const chatGrid = el('div', { role: 'grid' });
+  pane.append(chatGrid);
+  const picker = el('div', {}).append(el('div', { role: 'grid', 'aria-label': 'Choose date' }));
+  openConversation();
+  root.append(picker);
+  escape();
+  await sleep(300);
+  check('Escape with the date picker up leaves the conversation open', closedChats, 0);
+  picker.remove();
+  escape();
+  await sleep(300);
+  check('and the chat list\'s own grid is no picker: an Escape that closed nothing still closes it',
+        closedChats, 1);
+  chatGrid.remove();
+  openConversation();
 
   console.log(failures ? '\n' + failures + ' failed' : '\nall checks pass');
   process.exit(failures ? 1 : 0);

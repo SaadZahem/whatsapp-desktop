@@ -1661,6 +1661,19 @@ const start = ({ send, on }) => {
      read at the keypress. */
   const SELECTING = 'input[type="checkbox"]';
 
+  /* The date picker that in-chat search opens from its calendar button
+     (issue #10). It is the dropdown's kind, only slower: WhatsApp closes it on
+     Escape, but it was still up 300ms after the key and gone by 500ms, and the
+     page did not move inside the watch -- 2519 nodes at the key and still 2519
+     at 50ms, measured -- so the watch called it an Escape that closed nothing
+     and closed the conversation, taking the search panel and the picker with it.
+     It is a [role="grid"], which the chat list is too, so a grid counts only
+     where the picker is mounted: the popup layer, outside the chat list, the
+     conversation and every drawer. */
+  const IN_PLACE = '#pane-side, #main, [data-testid^="drawer-"]';
+  const popupGrid = () =>
+    [...document.querySelectorAll('[role="grid"]')].some(grid => !grid.closest(IN_PLACE));
+
   /* A bar in the composer with a cancel on it -- a reply being written, a
      message being edited. This one is a guess made safe rather than a
      measurement: the reply bar cannot be raised from a script, because the
@@ -1691,6 +1704,7 @@ const start = ({ send, on }) => {
     const main = conversation();
     if (!main) return true;
     if (document.querySelector(OPEN_LAYER)) return true;
+    if (popupGrid()) return true;
     if (main.querySelector(SELECTING)) return true;
     /* The profile drawer. It has no name of its own, but it is the only thing
        that puts a second [role="dialog"] on the page and puts it OUTSIDE the
