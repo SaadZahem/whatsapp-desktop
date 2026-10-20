@@ -368,10 +368,11 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
    config kept in git sees that write as a change on every close -- so with
    remember-size off the size must not be touched, and the zoom still must.
    And only a change is written: the window's state is kept as it changes now,
-   so most of these calls find the file already right. */
+   so most of these calls find the file already right. The zoom is the one the
+   keys chose, never the page's: a page not yet given its zoom answers 1. */
 {
   const close = ({ remember = true, maximized = false, noted = true, visible = true,
-                   was = {} } = {}) => {
+                   was = {}, chosen = null, page = 1 } = {}) => {
     const values = Object.assign({ 'window.remember-size': remember, 'window.maximized': false,
                                    'window.width': 1200, 'window.height': 800, 'view.zoom': 1 }, was);
     let saves = 0;
@@ -388,14 +389,15 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
                                    : { x: 0, y: 0, width: 958, height: 1047 },
         /* What X11 answers: the maximised size, not the one it goes back to. */
         getNormalBounds: () => ({ x: 0, y: 0, width: 2560, height: 1373 }),
-        /* What Chromium answers after two Ctrl+= from 0.9. */
-        webContents: { getZoomFactor: () => 1.1000000000000003 },
+        webContents: { getZoomFactor: () => page },
       },
       electronScreen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1920, height: 1080 } }) },
     });
     vm.runInContext(controller + '\nglobalThis.keep = keepWindowState;' +
-                    '\nglobalThis.note = noteNormalSize;', context,
+                    '\nglobalThis.note = noteNormalSize;' +
+                    '\nglobalThis.choose = zoom => { zoomChosen = zoom; };', context,
                     { filename: 'main.js (window controller)' });
+    if (chosen !== null) context.choose(chosen);
     /* The window at its own size, then maximised by the window manager: the
        resize that maximises it is not noted. */
     if (noted) {
@@ -408,22 +410,32 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
              maximized: values['window.maximized'], zoom: values['view.zoom'], saves };
   };
   check('a close writes the size the window manager gave it, by default',
-        close(), { size: [958, 1047], maximized: false, zoom: 1.1, saves: 1 });
+        close({ chosen: 1.1 }), { size: [958, 1047], maximized: false, zoom: 1.1, saves: 1 });
   check('a maximised window is written down as maximised, with the size it un-maximises to',
-        close({ maximized: true }), { size: [958, 1047], maximized: true, zoom: 1.1, saves: 1 });
+        close({ maximized: true, chosen: 1.1 }), { size: [958, 1047], maximized: true, zoom: 1.1, saves: 1 });
   check('with remember-size off, the size in the file is left as it was',
-        close({ remember: false }), { size: [1200, 800], maximized: false, zoom: 1.1, saves: 1 });
+        close({ remember: false, chosen: 1.1 }), { size: [1200, 800], maximized: false, zoom: 1.1, saves: 1 });
   check('and so is whether it was maximised',
-        close({ remember: false, maximized: true }), { size: [1200, 800], maximized: false, zoom: 1.1, saves: 1 });
+        close({ remember: false, maximized: true, chosen: 1.1 }),
+        { size: [1200, 800], maximized: false, zoom: 1.1, saves: 1 });
   /* A client the session started into the tray was never shown, so it is not
      maximised -- and that is not the window as it was left. */
   check('a window in the tray keeps the state it had when it was last up',
-        close({ visible: false, was: { 'window.maximized': true, 'window.width': 958, 'window.height': 1047 } }),
+        close({ visible: false, chosen: 1.1,
+                was: { 'window.maximized': true, 'window.width': 958, 'window.height': 1047 } }),
         { size: [958, 1047], maximized: true, zoom: 1.1, saves: 1 });
   check('a window already written down as it is writes nothing',
-        close({ maximized: true, was: { 'window.maximized': true, 'window.width': 958,
-                                        'window.height': 1047, 'view.zoom': 1.1 } }),
+        close({ maximized: true, chosen: 1.1, was: { 'window.maximized': true, 'window.width': 958,
+                                                     'window.height': 1047, 'view.zoom': 1.1 } }),
         { size: [958, 1047], maximized: true, zoom: 1.1, saves: 0 });
+  /* The launch: the window settles and is written down before WhatsApp's page
+     has been given the configured zoom, and the page answers 1 meanwhile. */
+  check('a zoom the keys have not chosen is left as the file has it',
+        close({ page: 1, was: { 'view.zoom': 1.4 } }),
+        { size: [958, 1047], maximized: false, zoom: 1.4, saves: 1 });
+  check('and a window with nothing else to write writes nothing for it',
+        close({ page: 1, was: { 'view.zoom': 1.4, 'window.width': 958, 'window.height': 1047 } }),
+        { size: [958, 1047], maximized: false, zoom: 1.4, saves: 0 });
 }
 
 /* Kept as it changes, not only on close: the session going down stops the

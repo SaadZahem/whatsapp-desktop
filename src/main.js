@@ -397,9 +397,18 @@ const putUp = () => {
    the session started into the tray and nobody has opened yet -- not
    maximised only because it was never shown, so quitting it before opening it
    used to write maximized = false over a window left maximised. */
+/* The zoom the keys last chose, and null until they choose one. It used to be
+   read off the page whenever the window was written down, which is whatever
+   the page happens to be at -- and at launch that is 1. The window maps and
+   settles before WhatsApp's page has loaded and been given the configured
+   zoom, and the resize that settles it is written down 500ms later: shown at
+   32.027, "kept view.zoom = 1" at 32.543 and the page ready after that,
+   measured over a conf that said 1.40. Every launch put the zoom back to 1. */
+let zoomChosen = null;
+
 const keepWindowState = () => {
   if (!win || win.isDestroyed()) return;
-  const state = { 'view.zoom': Math.round(win.webContents.getZoomFactor() * 100) / 100 };
+  const state = zoomChosen === null ? {} : { 'view.zoom': zoomChosen };
   const up = win.isVisible() && !win.isMinimized() && !win.isFullScreen();
   if (config.get('window.remember-size') !== false && up) {
     const maximized = win.isMaximized();
@@ -1056,6 +1065,8 @@ const changeSetting = (key, value) => {
   config.save();
   if (key === 'view.zoom' && win && !win.isDestroyed()) {
     win.webContents.setZoomFactor(Number(value) || 1.0);
+    /* Written just now, so nothing the keys chose earlier is written over it. */
+    zoomChosen = null;
   }
   if (key === 'view.font-size') applyStyle();
   /* Redrawn rather than merely written: the owner has just moved a switch in a
@@ -2107,19 +2118,15 @@ const onKey = (event, input) => {
   }
 
   const zoom = win.webContents.getZoomFactor();
-  if (ctrl && (key === '+' || key === '=')) {
+  const choose = next => {
     event.preventDefault();
-    win.webContents.setZoomFactor(Math.min(3, zoom + 0.1));
+    win.webContents.setZoomFactor(next);
+    zoomChosen = Math.round(next * 100) / 100;
     keepSoon();
-  } else if (ctrl && key === '-') {
-    event.preventDefault();
-    win.webContents.setZoomFactor(Math.max(0.3, zoom - 0.1));
-    keepSoon();
-  } else if (ctrl && key === '0') {
-    event.preventDefault();
-    win.webContents.setZoomFactor(1);
-    keepSoon();
-  }
+  };
+  if (ctrl && (key === '+' || key === '=')) choose(Math.min(3, zoom + 0.1));
+  else if (ctrl && key === '-') choose(Math.max(0.3, zoom - 0.1));
+  else if (ctrl && key === '0') choose(1);
 };
 
 /* A call window answers to fewer keys than the client does, and reload is not
